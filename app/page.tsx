@@ -120,7 +120,7 @@ export default function ApiDashboard() {
         
         <header className="flex justify-between items-start mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">SpeakSmart API v1</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Speak Smart Baguio API v1</h1>
             <p>Built with Next.JS</p>
           </div>
         </header>
