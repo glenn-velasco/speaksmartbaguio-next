@@ -1,12 +1,21 @@
 import { NextResponse, NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { z } from "zod";
+
+const ROUTE_COLLECTION = "translations";
 
 interface TranslationsItem {
   english: string;
   ilokano: string;
   tagalog: string;
 }
+
+const translationsQuerySchema = z.object({
+  english: z.string().min(1, { error: "English is required" }),
+  ilokano: z.string().min(1, { error: "Ilokano is required" }),
+  tagalog: z.string().min(1, { error: "Tagalog is required" }),
+});
 
 export async function GET(request: NextRequest) {
 
@@ -73,6 +82,51 @@ export async function GET(request: NextRequest) {
     console.error("Filtering API Error:", error);
     
     return NextResponse.json({ error: "Search failed" }, { status: 500 });
+  }
+
+}
+
+export async function POST(request: NextRequest) {
+  
+  try {
+
+    const body = await request.json();
+
+    const validation = translationsQuerySchema.safeParse(body);
+
+    if (!validation.success) {
+
+      return NextResponse.json({ 
+        error: "Validation failed",
+        details: validation.error.format()
+        }, 
+        { status: 400 }
+      );
+    }
+
+    const validData = validation.data;
+
+    const existingDocs = await adminDb.collection(ROUTE_COLLECTION)
+      .where("ilokano", "==", validData.ilokano)
+      .get();
+
+    if (!existingDocs.empty) {
+
+      return NextResponse.json({ error: "Ilokano Word already exists" }, { status: 409 });
+    }
+
+    const newDocRef = await adminDb.collection(ROUTE_COLLECTION).add(validData);
+
+    return NextResponse.json({ id: newDocRef.id, ...validData }, { status: 201 });
+  
+  } catch (error) {
+
+    if (error instanceof SyntaxError) {
+      
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    return NextResponse.json({ error: "Failed to add entry" }, { status: 500 });
   }
 
 }
