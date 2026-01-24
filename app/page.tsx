@@ -130,6 +130,13 @@ export default function ApiDashboard() {
             <strong>Auth Required:</strong> All requests must include the 
             <code className="bg-amber-100 dark:bg-amber-800 px-1 mx-1 rounded text-amber-900 dark:text-amber-100">x-api-key</code> header.
           </p>
+          <p className="text-amber-800 dark:text-amber-200 text-sm">
+            When running publicly, update the 
+            <code className="bg-amber-100 dark:bg-amber-800 px-1 mx-1 rounded text-amber-900 dark:text-amber-100">
+              ALLOWED_ORIGINS
+            </code> 
+            variable in your <strong>.env</strong> file to your public domain to avoid CORS issues.
+          </p>
         </div>
 
         <div className="space-y-16">
