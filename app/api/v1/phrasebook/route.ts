@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { QueryDocumentSnapshot } from "firebase-admin/firestore";
-import { z } from "zod";
+import { phraseBookQuerySchema } from "@/app/api/v1/phrasebook/schema";
 
 const ROUTE_COLLECTION = "phrasebook";
 
@@ -11,13 +11,6 @@ interface PhraseBookItem {
   tagalogTranslation: string;
   partOfSpeech: string;
 };
-
-const phraseBookQuerySchema = z.object({
-  ilokanoWord: z.string().min(1, { error: "Ilokano word is required" }),
-  englishTranslation: z.string().min(1, { error: "English translation is required" }),
-  tagalogTranslation: z.string().min(1, { error: "Tagalog translation is required" }),
-  partOfSpeech: z.enum(["noun", "verb", "adjective", "adverb", "pronoun", "phrase", "other"]).or(z.string().min(1)),
-});
 
 export async function GET(request: NextRequest) {
 
