@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import EndpointCard from '@/components/EndPointCard';
+import InstructionNotification from "@/components/InstructionNotification";
 
 export const metadata: Metadata = {
   title: "Speak Smart Baguio API",
@@ -125,19 +126,9 @@ export default function ApiDashboard() {
           </div>
         </header>
 
-        <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-400 p-4 mb-8">
-          <p className="text-amber-800 dark:text-amber-200 text-sm">
-            <strong>Auth Required:</strong> All requests must include the 
-            <code className="bg-amber-100 dark:bg-amber-800 px-1 mx-1 rounded text-amber-900 dark:text-amber-100">x-api-key</code> header.
-          </p>
-          <p className="text-amber-800 dark:text-amber-200 text-sm">
-            When running publicly, update the 
-            <code className="bg-amber-100 dark:bg-amber-800 px-1 mx-1 rounded text-amber-900 dark:text-amber-100">
-              ALLOWED_ORIGINS
-            </code> 
-            variable in your <strong>.env</strong> file to your public domain to avoid CORS issues.
-          </p>
-        </div>
+        <InstructionNotification message="All requests must include the" code="x-api-key" />
+
+        <InstructionNotification message="To prevent cors issues set your own domain at .env variable" code="ALLOWED_ORIGINS" />
 
         <div className="space-y-16">
           {sections.map((section, sIndex) => (
