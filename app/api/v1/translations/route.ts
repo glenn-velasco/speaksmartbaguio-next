@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { QueryDocumentSnapshot } from "firebase-admin/firestore";
-import { z } from "zod";
+import { translationsQuerySchema } from "@/app/api/v1/translations/schema";
 
 const ROUTE_COLLECTION = "translations";
 
@@ -10,12 +10,6 @@ interface TranslationsItem {
   ilokano: string;
   tagalog: string;
 }
-
-const translationsQuerySchema = z.object({
-  english: z.string().min(1, { error: "English is required" }),
-  ilokano: z.string().min(1, { error: "Ilokano is required" }),
-  tagalog: z.string().min(1, { error: "Tagalog is required" }),
-});
 
 export async function GET(request: NextRequest) {
 
