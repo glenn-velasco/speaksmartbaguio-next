@@ -168,3 +168,35 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Failed to update entry" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  
+  try {
+
+    const searchParams = request.nextUrl.searchParams;
+
+    const id = searchParams.get("id");
+
+    if (!id) {
+
+      return NextResponse.json({ error: "Document ID is required" }, { status: 400 });
+    }
+
+    const docRef = adminDb.collection(ROUTE_COLLECTION).doc(id);
+
+    const docSnapshot = await docRef.get();
+
+    if (!docSnapshot.exists) {
+
+      return NextResponse.json({ error: "Entry not found" }, { status: 404 });
+    }
+
+    await docRef.delete();
+
+    return NextResponse.json({ message: "Entry deleted successfully", id }, { status: 200 });
+
+  } catch (error) {
+    
+    return NextResponse.json({ error: "Failed to delete entry" }, { status: 500 });
+  }
+}
