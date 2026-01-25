@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { QueryDocumentSnapshot } from "firebase-admin/firestore";
-import { phraseBookQuerySchema } from "@/app/api/v1/phrasebook/schema";
+import { phraseBookQuerySchema, phraseBookDatabaseSchema } from "@/app/api/v1/phrasebook/schema";
 
 const ROUTE_COLLECTION = "phrasebook";
 
@@ -121,4 +121,49 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to add entry" }, { status: 500 });
   }
 
+}
+
+export async function PUT(request: NextRequest) {
+
+  try {
+
+    const body = await request.json();
+
+    const validation = phraseBookDatabaseSchema.safeParse(body);
+
+    if (!validation.success) {
+
+      return NextResponse.json({ 
+        error: validation.error.format()
+       }, 
+       { status: 400 }
+      );
+    }
+
+    const { id, ...updateData} = validation.data;
+
+    const docRef = adminDb.collection(ROUTE_COLLECTION).doc(id);
+
+    const docSnapshot = await docRef.get();
+
+    if (!docSnapshot.exists) {
+      
+      return NextResponse.json({ error: "Document ID not found" }, { status: 404 });
+    }
+
+    await docRef.update({
+      ilokanoWord: updateData.ilokanoWord,
+      englishTranslation: updateData.englishTranslation,
+      tagalogTranslation: updateData.tagalogTranslation,
+      partOfSpeech: updateData.partOfSpeech
+    });
+
+    return NextResponse.json({ message: "Entry updated successfully" }, { status: 200 });
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    return NextResponse.json({ error: "Failed to update entry" }, { status: 500 });
+  }
 }
