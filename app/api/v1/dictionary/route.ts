@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { QueryDocumentSnapshot } from "firebase-admin/firestore";
-import { z } from "zod";
+import { dictionaryDatabaseSchema, dictionaryQuerySchema } from "@/app/api/v1/dictionary/schema";
 
 const ROUTE_COLLECTION = "dictionary";
 
@@ -12,14 +12,6 @@ interface DictionaryItem {
   partOfSpeech: string;
   category: string;
 }
-
-const dictionaryQuerySchema = z.object({
-  ilokanoWord: z.string().min(1, { error: "Ilokano word is required" }),
-  englishTranslation: z.string().min(1, { error: "English translation is required" }),
-  tagalogTranslation: z.string().min(1, { error: "Tagalog translation is required" }),
-  partOfSpeech: z.enum(["noun", "verb", "adjective", "adverb", "pronoun", "phrase", "other"]).or(z.string().min(1)),
-  category: z.string().min(1, { error: "Category is required" }),
-});
 
 export async function GET(request: NextRequest) {
 
@@ -137,4 +129,82 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to add entry" }, { status: 500 });
   }
 
+}
+
+export async function PUT(request: NextRequest) {
+
+  try {
+
+    const body = await request.json();
+
+    const validation = dictionaryDatabaseSchema.safeParse(body);
+
+    if (!validation.success) {
+
+      return NextResponse.json({ 
+        error: validation.error.format()
+       }, 
+       { status: 400 }
+      );
+    }
+
+    const { id, ...updateData} = validation.data;
+
+    const docRef = adminDb.collection(ROUTE_COLLECTION).doc(id);
+
+    const docSnapshot = await docRef.get();
+
+    if (!docSnapshot.exists) {
+      
+      return NextResponse.json({ error: "Document ID not found" }, { status: 404 });
+    }
+
+    await docRef.update({
+      ilokanoWord: updateData.ilokanoWord,
+      englishTranslation: updateData.englishTranslation,
+      tagalogTranslation: updateData.tagalogTranslation,
+      partOfSpeech: updateData.partOfSpeech,
+      category: updateData.category,
+    });
+
+    return NextResponse.json({ message: "Entry updated successfully" }, { status: 200 });
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    return NextResponse.json({ error: "Failed to update entry" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  
+  try {
+
+    const searchParams = request.nextUrl.searchParams;
+
+    const id = searchParams.get("id");
+
+    if (!id) {
+
+      return NextResponse.json({ error: "Document ID is required" }, { status: 400 });
+    }
+
+    const docRef = adminDb.collection(ROUTE_COLLECTION).doc(id);
+
+    const docSnapshot = await docRef.get();
+
+    if (!docSnapshot.exists) {
+
+      return NextResponse.json({ error: "Entry not found" }, { status: 404 });
+    }
+
+    await docRef.delete();
+
+    return NextResponse.json({ message: "Entry deleted successfully", id }, { status: 200 });
+
+  } catch (error) {
+    
+    return NextResponse.json({ error: "Failed to delete entry" }, { status: 500 });
+  }
 }
