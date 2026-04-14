@@ -1,0 +1,15 @@
+$kind: collection
+description: Full test suite for Speak Smart Baguio API - Dictionary,
+  Phrasebook, Translations, and Health endpoints
+variables:
+  dictionary_id: ""
+  dictionary_category: test_cat
+  phrasebook_id: ""
+  translations_id: ""
+auth:
+  - id: f84985aa-85dc-432a-84ec-6d197112fc37
+    type: apikey
+    name: apikey auth
+    credentials:
+      value: "{{api_key}}"
+      key: x-api-key

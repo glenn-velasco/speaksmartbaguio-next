@@ -1,0 +1,20 @@
+name: Speak Smart Baguio - Local
+values:
+  - key: base_url
+    value: 'http://localhost:3000'
+    enabled: true
+  - key: api_key
+    value: your-api-key-here
+    enabled: true
+  - key: dictionary_id
+    value: ''
+    enabled: true
+  - key: phrasebook_id
+    value: ''
+    enabled: true
+  - key: translations_id
+    value: ''
+    enabled: true
+  - key: dictionary_ilokanoWord
+    value: test_duplicate_word
+    enabled: true

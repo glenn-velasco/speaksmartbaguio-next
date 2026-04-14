@@ -1,0 +1,37 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/phrasebook"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: "{}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 201 Created", function () {
+        pm.response.to.have.status(201);
+      });
+      pm.test("Response has id", function () {
+        const res = pm.response.json();
+        pm.expect(res.data).to.exist;
+        pm.expect(res.data.id).to.exist;
+        pm.collectionVariables.set("phrasebook_id", res.data.id);
+      });
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      const timestamp = Date.now();
+      pm.request.body.update({
+        mode: 'raw',
+        raw: JSON.stringify({
+          ilokanoWord: `phrase_${timestamp}",
+          englishTranslation: `Phrase English ${timestamp}",
+          tagalogTranslation: `Phrase Tagalog ${timestamp}",
+          partOfSpeech: "phrase",
+          tts_url: "https://example.com/tts/phrase"
+        }),
+        options: { raw: { language: 'json' } }
+      });
+    language: text/javascript
+order: 1000

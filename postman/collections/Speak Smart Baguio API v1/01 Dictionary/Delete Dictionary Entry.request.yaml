@@ -1,0 +1,17 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/dictionary?id={{dictionary_id}}"
+method: DELETE
+queryParams:
+  id: "{{dictionary_id}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 200", function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test("Response confirms deletion", function () {
+        const res = pm.response.json();
+        pm.expect(res.data.message).to.include("deleted");
+      });
+    language: text/javascript
+order: 7000

@@ -1,0 +1,35 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/translations"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: "{}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 201 Created", function () {
+        pm.response.to.have.status(201);
+      });
+      pm.test("Response has id", function () {
+        const res = pm.response.json();
+        pm.expect(res.data).to.exist;
+        pm.expect(res.data.id).to.exist;
+        pm.collectionVariables.set("translations_id", res.data.id);
+      });
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      const timestamp = Date.now();
+      pm.request.body.update({
+        mode: 'raw',
+        raw: JSON.stringify({
+          english: `translation_english_${timestamp}",
+          ilokano: `translation_ilokano_${timestamp}",
+          tagalog: `translation_tagalog_${timestamp}"
+        }),
+        options: { raw: { language: 'json' } }
+      });
+    language: text/javascript
+order: 1000

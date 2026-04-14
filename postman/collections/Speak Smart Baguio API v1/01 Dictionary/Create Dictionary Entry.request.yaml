@@ -1,0 +1,44 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/dictionary"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: "{}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 201 Created", function () {
+        pm.response.to.have.status(201);
+      });
+      pm.test("Response has id and data", function () {
+        const res = pm.response.json();
+        pm.expect(res.data).to.exist;
+        pm.expect(res.data.id).to.exist;
+        pm.collectionVariables.set("dictionary_id", res.data.id);
+        pm.collectionVariables.set("dictionary_category", res.data.category);
+      });
+      pm.test("Fields match request", function () {
+        const res = pm.response.json();
+        pm.expect(res.data.ilokanoWord).to.include("test_word_");
+        pm.expect(res.data.category).to.eql("test_cat");
+      });
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      const timestamp = Date.now();
+      pm.request.body.update({
+        mode: 'raw',
+        raw: JSON.stringify({
+          ilokanoWord: `test_word_${timestamp}",
+          englishTranslation: `English test ${timestamp}",
+          tagalogTranslation: `Tagalog test ${timestamp}",
+          partOfSpeech: "noun",
+          category: "test_cat",
+          tts_url: "https://example.com/tts/test"
+        }),
+        options: { raw: { language: 'json' } }
+      });
+    language: text/javascript
+order: 1000

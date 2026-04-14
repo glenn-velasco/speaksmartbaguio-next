@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/translations?id={{translations_id}}"
+method: DELETE
+queryParams:
+  id: "{{translations_id}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 200", function () {
+        pm.response.to.have.status(200);
+      });
+    language: text/javascript
+order: 5000

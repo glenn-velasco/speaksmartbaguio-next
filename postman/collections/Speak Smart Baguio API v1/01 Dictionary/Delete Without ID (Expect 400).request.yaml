@@ -1,0 +1,15 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/dictionary"
+method: DELETE
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 400", function () {
+        pm.response.to.have.status(400);
+      });
+      pm.test("Error message mentions required ID", function () {
+        const res = pm.response.json();
+        pm.expect(res.error).to.include("required");
+      });
+    language: text/javascript
+order: 8000

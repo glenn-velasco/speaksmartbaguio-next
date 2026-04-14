@@ -1,0 +1,24 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/dictionary?limit=5"
+method: GET
+queryParams:
+  limit: "5"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 200", function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test("Response has data, hasMore fields", function () {
+        const res = pm.response.json();
+        pm.expect(res.data).to.be.an("array");
+        pm.expect(res.hasMore).to.exist;
+        pm.expect(res.total).to.exist;
+      });
+      pm.test("Respects limit param", function () {
+        const res = pm.response.json();
+        const limit = parseInt(pm.request.url.query.get("limit"));
+        pm.expect(res.data.length).to.be.at.most(limit);
+      });
+    language: text/javascript
+order: 3000

@@ -1,0 +1,20 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/dictionary"
+method: GET
+auth:
+  type: noauth
+scripts:
+  - type: beforeRequest
+    code: "pm.request.headers.add({key: 'x-api-key', value: 'invalid_key_12345'});"
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test("Status 403 Forbidden", function () {
+        pm.response.to.have.status(403);
+      });
+      pm.test("Error message mentions Forbidden", function () {
+        const res = pm.response.json();
+        pm.expect(res.error).to.include("Forbidden");
+      });
+    language: text/javascript
+order: 1000

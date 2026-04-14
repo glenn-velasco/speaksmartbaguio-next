@@ -1,0 +1,22 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/dictionary"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: '{"ilokanoWord":"dup_test_word","englishTranslation":"Duplicate
+    test","tagalogTranslation":"Dup
+    test","partOfSpeech":"noun","category":"dup_cat","tts_url":"https://example.com/tts"}'
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 409 Conflict", function () {
+        pm.response.to.have.status(409);
+      });
+      pm.test("Error response has conflict code", function () {
+        const res = pm.response.json();
+        pm.expect(res.code).to.eql("CONFLICT");
+      });
+    language: text/javascript
+order: 2000

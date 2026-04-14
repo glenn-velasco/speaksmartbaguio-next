@@ -1,0 +1,21 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/dictionary"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: '{"ilokanoWord":"only_word"}'
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status 400", function () {
+        pm.response.to.have.status(400);
+      });
+      pm.test("Validation error present", function () {
+        const res = pm.response.json();
+        pm.expect(res.code).to.eql("BAD_REQUEST");
+        pm.expect(res.details).to.exist;
+      });
+    language: text/javascript
+order: 9000
