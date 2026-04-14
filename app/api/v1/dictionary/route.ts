@@ -29,33 +29,40 @@ export async function GET(request: NextRequest) {
 
     const tagalog = searchParams.get("tagalogTranslation");
 
+    const tts_url = searchParams.get("tts_url");
+
     const limit = parseInt(searchParams.get("limit") || "10");
 
     let query: any = adminDb.collection(ROUTE_COLLECTION);
 
     if (partOfSpeech) {
-      
+
       query = query.where("partOfSpeech", "==", partOfSpeech);
     }
 
     if (category) {
-      
+
       query = query.where("category", "==", category);
     }
 
     if (english) {
-      
+
       query = query.where("englishTranslation", "==", english);
     }
 
     if (ilokano) {
-      
+
       query = query.where("ilokanoWord", "==", ilokano);
     }
 
     if (tagalog) {
-      
+
       query = query.where("tagalogTranslation", "==", tagalog);
+    }
+
+    if (tts_url) {
+
+      query = query.where("tts_url", "==", tagalog);
     }
 
     const searchSnapshot = await query.limit(limit).get();
@@ -80,7 +87,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
 
     console.error("Filtering API Error:", error);
-    
+
     return NextResponse.json({ error: "Search failed" }, { status: 500 });
   }
 
@@ -96,11 +103,11 @@ export async function POST(request: NextRequest) {
 
     if (!validation.success) {
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: "Validation failed",
         details: validation.error.format()
-       }, 
-       { status: 400 }
+      },
+        { status: 400 }
       );
     }
 
@@ -118,11 +125,11 @@ export async function POST(request: NextRequest) {
     const newDocRef = await adminDb.collection(ROUTE_COLLECTION).add(validData);
 
     return NextResponse.json({ id: newDocRef.id, ...validData }, { status: 201 });
-  
+
   } catch (error) {
 
     if (error instanceof SyntaxError) {
-      
+
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
@@ -141,21 +148,21 @@ export async function PUT(request: NextRequest) {
 
     if (!validation.success) {
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: validation.error.format()
-       }, 
-       { status: 400 }
+      },
+        { status: 400 }
       );
     }
 
-    const { id, ...updateData} = validation.data;
+    const { id, ...updateData } = validation.data;
 
     const docRef = adminDb.collection(ROUTE_COLLECTION).doc(id);
 
     const docSnapshot = await docRef.get();
 
     if (!docSnapshot.exists) {
-      
+
       return NextResponse.json({ error: "Document ID not found" }, { status: 404 });
     }
 
@@ -165,12 +172,13 @@ export async function PUT(request: NextRequest) {
       tagalogTranslation: updateData.tagalogTranslation,
       partOfSpeech: updateData.partOfSpeech,
       category: updateData.category,
+      tts_url: updateData.tts_url
     });
 
     return NextResponse.json({ message: "Entry updated successfully" }, { status: 200 });
   } catch (error) {
     if (error instanceof SyntaxError) {
-      
+
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
     return NextResponse.json({ error: "Failed to update entry" }, { status: 500 });
@@ -178,7 +186,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  
+
   try {
 
     const searchParams = request.nextUrl.searchParams;
@@ -204,7 +212,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: "Entry deleted successfully", id }, { status: 200 });
 
   } catch (error) {
-    
+
     return NextResponse.json({ error: "Failed to delete entry" }, { status: 500 });
   }
 }

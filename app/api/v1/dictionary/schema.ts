@@ -6,6 +6,7 @@ export const dictionaryQuerySchema = z.object({
   tagalogTranslation: z.string().min(1, { error: "Tagalog translation is required" }),
   partOfSpeech: z.enum(["noun", "verb", "adjective", "adverb", "pronoun", "phrase", "other"]).or(z.string().min(1)),
   category: z.string().min(1, { error: "Category is required" }),
+  tts_url: z.string().min(1, { error: "Text to speech url to to is required" }),
 });
 
 export const dictionaryDatabaseSchema = dictionaryQuerySchema.extend({
