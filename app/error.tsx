@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { Flex, Heading, Text, Button, Callout } from "@radix-ui/themes";
+import { AlertCircle } from "lucide-react";
 
 export default function Error({
   error,
@@ -14,21 +16,23 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black">
-      <div className="text-center p-8">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+    <Flex minHeight="100vh" align="center" justify="center" p="4">
+      <Flex direction="column" align="center" gap="4" style={{ maxWidth: 480 }}>
+        <Heading size="6" highContrast>
           Something went wrong
-        </h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-6">
-          {error.message || "An unexpected error occurred"}
-        </p>
-        <button
-          onClick={reset}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
-        >
+        </Heading>
+        <Callout.Root color="red" size="2">
+          <Callout.Icon>
+            <AlertCircle className="w-4 h-4" />
+          </Callout.Icon>
+          <Callout.Text>
+            {error.message || "An unexpected error occurred"}
+          </Callout.Text>
+        </Callout.Root>
+        <Button onClick={reset} size="3">
           Try again
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Flex>
+    </Flex>
   );
 }

@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAPI } from "@/lib/fetch-api";
+import { Flex, Heading, Text, Button, Card, Spinner, Container, Box, TextField, Separator } from "@radix-ui/themes";
+import { Pagination } from "@/components/Pagination";
+import { Search } from "lucide-react";
+
+const ITEMS_PER_PAGE = 12;
 
 interface TranslationItem {
   id: string;
@@ -18,20 +23,44 @@ export default function TranslationsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    async function fetchTranslations() {
-      try {
-        const result = await fetchAPI("/api/v1/translations?limit=100");
-        setItems(result.data || []);
-      } catch (error) {
-        console.error("Failed to fetch translations:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const cursorMap = useRef<Record<number, string | undefined>>({ 1: undefined });
 
-    fetchTranslations();
+  const fetchPage = useCallback(async (page: number) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: String(ITEMS_PER_PAGE) });
+      const cursor = cursorMap.current[page];
+      if (cursor) {
+        params.set("cursor", cursor);
+      }
+
+      const result = await fetchAPI(`/api/v1/translations?${params}`);
+      setItems(result.data || []);
+      setHasMore(result.hasMore || false);
+
+      if (result.nextCursor) {
+        cursorMap.current[page + 1] = result.nextCursor;
+      }
+    } catch (error) {
+      console.error("Failed to fetch translations:", error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchPage(1);
+  }, [fetchPage]);
+
+  function handlePageChange(page: number) {
+    setCurrentPage(page);
+    fetchPage(page);
+  }
+
+  const totalDiscoveredPages = Math.max(...Object.keys(cursorMap.current).map(Number));
 
   const filteredItems = items.filter(item =>
     item.english.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -40,72 +69,80 @@ export default function TranslationsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Translations
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400">
-                Direct word translations between languages
-              </p>
-            </div>
-            {user && (
-              <Link
-                href={`/translations/new${searchTerm ? `?translation=${encodeURIComponent(searchTerm)}` : ''}`}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors"
-              >
+    <Box minHeight="100vh">
+      <Container size="4" px="4" py="6">
+        <Flex justify="between" align="start" mb="4">
+          <Box>
+            <Heading size="7" mb="1" highContrast>Translations</Heading>
+            <Text color="gray" size="3">Direct word translations between languages</Text>
+          </Box>
+          {user && (
+            <Button asChild size="2">
+              <Link href={`/translations/new${searchTerm ? `?translation=${encodeURIComponent(searchTerm)}` : ''}`}>
                 Add Translation
               </Link>
-            )}
-          </div>
+            </Button>
+          )}
+        </Flex>
 
-          <input
-            type="text"
+        <Box mb="5">
+          <TextField.Root
             placeholder="Search translations..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-6"
-          />
-        </div>
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+            size="3"
+          >
+            <TextField.Slot>
+              <Search className="w-4 h-4" />
+            </TextField.Slot>
+          </TextField.Root>
+        </Box>
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
+          <Flex justify="center" py="9">
+            <Spinner size="3" />
+          </Flex>
         ) : filteredItems.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">No translations found</p>
-          </div>
+          <Flex justify="center" py="9">
+            <Text color="gray">No translations found</Text>
+          </Flex>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredItems.map((item) => (
-              <Link
-                key={item.id}
-                href={`/translations/${item.id}`}
-                className="block p-6 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 hover:shadow-lg transition-shadow"
-              >
-                <div className="space-y-3">
-                  <div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">English</span>
-                    <span className="text-lg font-semibold text-gray-900 dark:text-white">{item.english}</span>
-                  </div>
-                  <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                    <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Ilokano</span>
-                    <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">{item.ilokano}</span>
-                  </div>
-                  <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                    <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Tagalog</span>
-                    <span className="text-lg font-semibold text-green-600 dark:text-green-400">{item.tagalog}</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredItems.map((item) => (
+                <Link key={item.id} href={`/translations/${item.id}`} style={{ textDecoration: "none" }}>
+                  <Card size="2" style={{ cursor: "pointer" }} className="transition-shadow hover:shadow-lg">
+                    <Flex direction="column" gap="3">
+                      <Box>
+                        <Text size="1" color="gray">English</Text>
+                        <Text size="4" weight="medium" highContrast as="p">{item.english}</Text>
+                      </Box>
+                      <Separator size="4" />
+                      <Box>
+                        <Text size="1" color="gray">Ilokano</Text>
+                        <Text size="4" weight="medium" color="indigo" as="p">{item.ilokano}</Text>
+                      </Box>
+                      <Separator size="4" />
+                      <Box>
+                        <Text size="1" color="gray">Tagalog</Text>
+                        <Text size="4" weight="medium" color="green" as="p">{item.tagalog}</Text>
+                      </Box>
+                    </Flex>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+
+            <Pagination
+              hasMore={hasMore}
+              currentPage={currentPage}
+              totalDiscoveredPages={totalDiscoveredPages}
+              onPageChange={handlePageChange}
+              loading={loading}
+            />
+          </>
         )}
-      </div>
-    </div>
+      </Container>
+    </Box>
   );
 }

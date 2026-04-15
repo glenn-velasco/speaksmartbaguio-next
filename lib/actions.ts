@@ -3,9 +3,10 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireAdmin, AuthenticatedUser, verifyToken } from "@/lib/auth-server";
+import { setUserRole } from "@/lib/admin-roles";
 
 export type SubmissionAction = "create" | "update" | "delete";
-export type CollectionType = "dictionary" | "phrasebook" | "translations";
+export type CollectionType = "dictionary" | "phrasebook" | "translations" | "roles";
 export type SubmissionStatus = "pending" | "approved" | "rejected";
 
 export interface SubmissionData {
@@ -183,8 +184,36 @@ export async function getTranslationItems() {
   }
 }
 
+export async function getDocumentById(collection: string, id: string) {
+  try {
+    const doc = await adminDb.collection(collection).doc(id).get();
+
+    if (!doc.exists) {
+      return null;
+    }
+
+    return { id: doc.id, ...doc.data() };
+  } catch (error) {
+    console.error(`Failed to get ${collection} document:`, error);
+    return null;
+  }
+}
+
 async function applySubmission(submission: any) {
   const { collection, action, targetId, data } = submission;
+
+  if (collection === "roles" && action === "update") {
+    if (targetId && data.role) {
+      await setUserRole(targetId, data.role);
+      // Optional: Update the user's document in Firestore if it exists
+      try {
+        await adminDb.collection("users").doc(targetId).update({ role: data.role });
+      } catch (e) {
+        // Ignored if user profile doesn't exist
+      }
+    }
+    return;
+  }
 
   switch (action) {
     case "create": {

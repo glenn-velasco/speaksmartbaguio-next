@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import * as Tabs from "@radix-ui/react-tabs";
+import { Tabs, Flex, Heading, Text, Button, Card, Badge, Spinner, Container, Box, TextField } from "@radix-ui/themes";
 import { fetchAPI } from "@/lib/fetch-api";
+import { Pagination } from "@/components/Pagination";
+import { AudioPlayButton } from "@/components/AudioPlayButton";
+import { Search } from "lucide-react";
+
+const ITEMS_PER_PAGE = 12;
 
 interface DictionaryItem {
   id: string;
@@ -23,25 +28,51 @@ export default function DictionaryPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
 
-  useEffect(() => {
-    async function fetchDictionary() {
-      try {
-        const params = new URLSearchParams({ limit: "100" });
-        if (filter !== "all") {
-          params.set("partOfSpeech", filter);
-        }
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const cursorMap = useRef<Record<number, string | undefined>>({ 1: undefined }); // page -> cursor
 
-        const result = await fetchAPI(`/api/v1/dictionary?${params}`);
-        setItems(result.data || []);
-      } catch (error) {
-        console.error("Failed to fetch dictionary:", error);
-      } finally {
-        setLoading(false);
+  const fetchPage = useCallback(async (page: number, filter: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: String(ITEMS_PER_PAGE) });
+      if (filter !== "all") {
+        params.set("partOfSpeech", filter);
       }
-    }
+      const cursor = cursorMap.current[page];
+      if (cursor) {
+        params.set("cursor", cursor);
+      }
 
-    fetchDictionary();
-  }, [filter]);
+      const result = await fetchAPI(`/api/v1/dictionary?${params}`);
+      setItems(result.data || []);
+      setHasMore(result.hasMore || false);
+
+      // Store cursor for the next page
+      if (result.nextCursor) {
+        cursorMap.current[page + 1] = result.nextCursor;
+      }
+    } catch (error) {
+      console.error("Failed to fetch dictionary:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Reset pagination when filter changes
+    cursorMap.current = { 1: undefined };
+    setCurrentPage(1);
+    fetchPage(1, filter);
+  }, [filter, fetchPage]);
+
+  function handlePageChange(page: number) {
+    setCurrentPage(page);
+    fetchPage(page, filter);
+  }
+
+  const totalDiscoveredPages = Math.max(...Object.keys(cursorMap.current).map(Number));
 
   const filteredItems = items.filter(item =>
     item.ilokanoWord.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -50,98 +81,90 @@ export default function DictionaryPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Dictionary
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400">
-                Browse and search Ilokano words and translations
-              </p>
-            </div>
-            {user && (
-              <Link
-                href={`/dictionary/new${searchTerm ? `?word=${encodeURIComponent(searchTerm)}` : ''}`}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors"
-              >
+    <Box minHeight="100vh">
+      <Container size="4" px="4" py="6">
+        <Flex justify="between" align="start" mb="4">
+          <Box>
+            <Heading size="7" mb="1" highContrast>Dictionary</Heading>
+            <Text color="gray" size="3">Browse and search Ilokano words and translations</Text>
+          </Box>
+          {user && (
+            <Button asChild size="2">
+              <Link href={`/dictionary/new${searchTerm ? `?word=${encodeURIComponent(searchTerm)}` : ''}`}>
                 Add Word
               </Link>
-            )}
-          </div>
+            </Button>
+          )}
+        </Flex>
 
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <input
-              type="text"
-              placeholder="Search words..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+        <Box mb="5">
+          <TextField.Root
+            placeholder="Search words..."
+            value={searchTerm}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+            size="3"
+          >
+            <TextField.Slot>
+              <Search className="w-4 h-4" />
+            </TextField.Slot>
+          </TextField.Root>
+        </Box>
 
-          <Tabs.Root value={filter} onValueChange={setFilter}>
-            <Tabs.List className="flex gap-2 mb-6 overflow-x-auto">
-              {["all", "Noun", "Verb", "Adjective", "Adverb", "Pronoun", "Phrase", "Other"].map((tab) => (
-                <Tabs.Trigger
-                  key={tab}
-                  value={tab}
-                  className="px-4 py-2 text-sm font-medium rounded-md capitalize transition-colors data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:bg-white dark:bg-gray-900 data-[state=inactive]:text-gray-700 dark:text-gray-300 data-[state=inactive]:border data-[state=inactive]:border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
-                >
-                  {tab}
-                </Tabs.Trigger>
-              ))}
-            </Tabs.List>
-          </Tabs.Root>
-        </div>
+        <Tabs.Root value={filter} onValueChange={setFilter}>
+          <Tabs.List size="2" mb="5">
+            {["all", "Noun", "Verb", "Adjective", "Adverb", "Pronoun", "Phrase", "Other"].map((tab) => (
+              <Tabs.Trigger key={tab} value={tab} style={{ textTransform: "capitalize" }}>
+                {tab}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+        </Tabs.Root>
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
+          <Flex justify="center" py="9">
+            <Spinner size="3" />
+          </Flex>
         ) : filteredItems.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">No words found</p>
-          </div>
+          <Flex justify="center" py="9">
+            <Text color="gray">No words found</Text>
+          </Flex>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredItems.map((item) => (
-              <Link
-                key={item.id}
-                href={`/dictionary/${item.id}`}
-                className="block p-6 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                    {item.ilokanoWord}
-                  </h3>
-                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded capitalize">
-                    {item.partOfSpeech}
-                  </span>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-gray-600 dark:text-gray-400">English:</span>{" "}
-                    <span className="text-gray-900 dark:text-white">{item.englishTranslation}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600 dark:text-gray-400">Tagalog:</span>{" "}
-                    <span className="text-gray-900 dark:text-white">{item.tagalogTranslation}</span>
-                  </div>
-                  {item.category && (
-                    <div>
-                      <span className="text-gray-600 dark:text-gray-400">Category:</span>{" "}
-                      <span className="text-gray-900 dark:text-white">{item.category}</span>
-                    </div>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredItems.map((item) => (
+                <Link key={item.id} href={`/dictionary/${item.id}`} style={{ textDecoration: "none" }}>
+                  <Card size="2" style={{ cursor: "pointer" }} className="transition-shadow hover:shadow-lg">
+                    <Flex justify="between" align="start" mb="2">
+                      <Flex align="center" gap="1">
+                        <Heading size="4" highContrast>{item.ilokanoWord}</Heading>
+                        {item.tts_url && <AudioPlayButton src={item.tts_url} size="1" />}
+                      </Flex>
+                      <Badge color="indigo" variant="soft" style={{ textTransform: "capitalize" }}>
+                        {item.partOfSpeech}
+                      </Badge>
+                    </Flex>
+                    <Flex direction="column" gap="1">
+                      <Text size="2"><Text color="gray">English:</Text> <Text highContrast>{item.englishTranslation}</Text></Text>
+                      <Text size="2"><Text color="gray">Tagalog:</Text> <Text highContrast>{item.tagalogTranslation}</Text></Text>
+                      {item.category && (
+                        <Text size="2"><Text color="gray">Category:</Text> <Text highContrast>{item.category}</Text></Text>
+                      )}
+                    </Flex>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+
+            <Pagination
+              hasMore={hasMore}
+              currentPage={currentPage}
+              totalDiscoveredPages={totalDiscoveredPages}
+              onPageChange={handlePageChange}
+              loading={loading}
+            />
+          </>
         )}
-      </div>
-    </div>
+      </Container>
+    </Box>
   );
 }

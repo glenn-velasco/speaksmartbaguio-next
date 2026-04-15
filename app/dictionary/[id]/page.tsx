@@ -6,7 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { createSubmission } from "@/lib/actions";
 import { fetchAPI } from "@/lib/fetch-api";
-import * as AlertDialog from "@radix-ui/react-alert-dialog";
+import { AlertDialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, Spinner, DataList } from "@radix-ui/themes";
+import { AudioPlayButton } from "@/components/AudioPlayButton";
 
 export default function DictionaryDetailPage() {
   const { user, role } = useAuth();
@@ -52,115 +53,103 @@ export default function DictionaryDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
+      <Flex minHeight="100vh" align="center" justify="center">
+        <Spinner size="3" />
+      </Flex>
     );
   }
 
   if (!item) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Word Not Found</h1>
-          <Link href="/dictionary" className="text-blue-600 hover:text-blue-500">
-            ← Back to Dictionary
-          </Link>
-        </div>
-      </div>
+      <Flex minHeight="100vh" align="center" justify="center">
+        <Flex direction="column" align="center" gap="3">
+          <Heading size="5" highContrast>Word Not Found</Heading>
+          <Button asChild variant="ghost">
+            <Link href="/dictionary">← Back to Dictionary</Link>
+          </Button>
+        </Flex>
+      </Flex>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <Link href="/dictionary" className="text-blue-600 hover:text-blue-500">
-            ← Back to Dictionary
-          </Link>
-        </div>
+    <Box minHeight="100vh">
+      <Container size="3" px="4" py="6">
+        <Box mb="4">
+          <Button asChild variant="ghost" size="2">
+            <Link href="/dictionary">← Back to Dictionary</Link>
+          </Button>
+        </Box>
 
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-8">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                {item.ilokanoWord}
-              </h1>
-              <span className="inline-block px-3 py-1 text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded capitalize">
+        <Card size="4">
+          <Flex justify="between" align="start" mb="5">
+            <Box>
+              <Flex align="center" gap="2" mb="2">
+                <Heading size="8" highContrast>{item.ilokanoWord}</Heading>
+                {item.tts_url && <AudioPlayButton src={item.tts_url} size="3" label="Listen to pronunciation" />}
+              </Flex>
+              <Badge color="indigo" variant="soft" size="2" style={{ textTransform: "capitalize" }}>
                 {item.partOfSpeech}
-              </span>
-            </div>
+              </Badge>
+            </Box>
 
             {user && (
-              <div className="flex gap-2">
+              <Flex gap="2">
                 {(role === 'admin' || role === 'editor') && (
-                  <Link
-                    href={`/dictionary/${id}/edit`}
-                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-medium rounded-md transition-colors"
-                  >
-                    Edit
-                  </Link>
+                  <Button asChild variant="soft" color="orange">
+                    <Link href={`/dictionary/${id}/edit`}>Edit</Link>
+                  </Button>
                 )}
 
                 {role === 'admin' && (
                   <AlertDialog.Root>
-                    <AlertDialog.Trigger asChild>
-                      <button className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md transition-colors">
-                        Delete
-                      </button>
+                    <AlertDialog.Trigger>
+                      <Button variant="soft" color="red">Delete</Button>
                     </AlertDialog.Trigger>
-                    <AlertDialog.Portal>
-                      <AlertDialog.Overlay className="fixed inset-0 bg-black/50" />
-                      <AlertDialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-                        <AlertDialog.Title className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                          Delete this word?
-                        </AlertDialog.Title>
-                        <AlertDialog.Description className="text-gray-600 dark:text-gray-400 mb-6">
-                          This will submit a deletion request for "{item.ilokanoWord}". An admin will review before it's removed.
-                        </AlertDialog.Description>
-                        <div className="flex gap-3">
-                          <AlertDialog.Cancel asChild>
-                            <button className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-medium rounded-md transition-colors">
-                              Cancel
-                            </button>
-                          </AlertDialog.Cancel>
-                          <AlertDialog.Action asChild>
-                            <button
-                              onClick={handleDelete}
-                              disabled={actionLoading}
-                              className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md disabled:opacity-50 transition-colors"
-                            >
-                              {actionLoading ? "Submitting..." : "Submit Deletion"}
-                            </button>
-                          </AlertDialog.Action>
-                        </div>
-                      </AlertDialog.Content>
-                    </AlertDialog.Portal>
+                    <AlertDialog.Content maxWidth="450px">
+                      <AlertDialog.Title>Delete this word?</AlertDialog.Title>
+                      <AlertDialog.Description size="2">
+                        This will submit a deletion request for &quot;{item.ilokanoWord}&quot;. An admin will review before it&apos;s removed.
+                      </AlertDialog.Description>
+                      <Flex gap="3" mt="4" justify="end">
+                        <AlertDialog.Cancel>
+                          <Button variant="soft" color="gray">Cancel</Button>
+                        </AlertDialog.Cancel>
+                        <AlertDialog.Action>
+                          <Button
+                            color="red"
+                            onClick={handleDelete}
+                            disabled={actionLoading}
+                          >
+                            {actionLoading ? "Submitting..." : "Submit Deletion"}
+                          </Button>
+                        </AlertDialog.Action>
+                      </Flex>
+                    </AlertDialog.Content>
                   </AlertDialog.Root>
                 )}
-              </div> 
+              </Flex>
             )}
-          </div>
-          <div className="space-y-6">
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">English Translation</h3>
-                <p className="text-xl text-gray-900 dark:text-white">{item.englishTranslation}</p>
-              </div>
+          </Flex>
 
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Tagalog Translation</h3>
-                <p className="text-xl text-gray-900 dark:text-white">{item.tagalogTranslation}</p>
-              </div>
-
-              {item.category && (
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
-                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Category</h3>
-                  <p className="text-xl text-gray-900 dark:text-white">{item.category}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+          <DataList.Root size="3">
+            <DataList.Item>
+              <DataList.Label>English Translation</DataList.Label>
+              <DataList.Value>{item.englishTranslation}</DataList.Value>
+            </DataList.Item>
+            <DataList.Item>
+              <DataList.Label>Tagalog Translation</DataList.Label>
+              <DataList.Value>{item.tagalogTranslation}</DataList.Value>
+            </DataList.Item>
+            {item.category && (
+              <DataList.Item>
+                <DataList.Label>Category</DataList.Label>
+                <DataList.Value>{item.category}</DataList.Value>
+              </DataList.Item>
+            )}
+          </DataList.Root>
+        </Card>
+      </Container>
+    </Box>
+  );
 }

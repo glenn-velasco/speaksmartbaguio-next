@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getSubmissions, reviewSubmission, SubmissionStatus, CollectionType } from "@/lib/actions";
-import * as Tabs from "@radix-ui/react-tabs";
-import * as Dialog from "@radix-ui/react-dialog";
+import { Tabs, Dialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, Spinner, TextArea } from "@radix-ui/themes";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 
 interface Submission {
@@ -75,9 +74,9 @@ export default function AdminDashboard() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
+      <Flex minHeight="100vh" align="center" justify="center">
+        <Spinner size="3" />
+      </Flex>
     );
   }
 
@@ -85,182 +84,190 @@ export default function AdminDashboard() {
     return null;
   }
 
-  const statusColors = {
-    pending: "bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200",
-    approved: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200",
-    rejected: "bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200",
+  const statusColors: Record<string, "yellow" | "green" | "red"> = {
+    pending: "yellow",
+    approved: "green",
+    rejected: "red",
   };
 
-  const actionIcons = {
-    create: <Plus className="w-8 h-8 text-blue-500" />,
-    update: <Pencil className="w-8 h-8 text-yellow-500" />,
-    delete: <Trash2 className="w-8 h-8 text-red-500" />,
+  const actionIcons: Record<string, React.ReactNode> = {
+    create: <Plus className="w-5 h-5" style={{ color: "var(--accent-9)" }} />,
+    update: <Pencil className="w-5 h-5" style={{ color: "var(--yellow-9)" }} />,
+    delete: <Trash2 className="w-5 h-5" style={{ color: "var(--red-9)" }} />,
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Admin Dashboard
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Review and manage user submissions
-          </p>
-        </div>
+    <Box minHeight="100vh">
+      <Container size="4" px="4" py="6">
+        <Box mb="6">
+          <Heading size="7" mb="1" highContrast>Admin Dashboard</Heading>
+          <Text color="gray" size="3">Review and manage user submissions</Text>
+        </Box>
 
         <Tabs.Root value={filterStatus} onValueChange={(value) => setFilterStatus(value as any)}>
-          <Tabs.List className="flex gap-2 mb-6">
+          <Tabs.List size="2" mb="5">
             {["all", "pending", "approved", "rejected"].map((status) => (
-              <Tabs.Trigger
-                key={status}
-                value={status}
-                className="px-4 py-2 text-sm font-medium rounded-md capitalize transition-colors data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:bg-white dark:bg-gray-900 data-[state=inactive]:text-gray-700 dark:text-gray-300 data-[state=inactive]:border data-[state=inactive]:border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
-              >
+              <Tabs.Trigger key={status} value={status} style={{ textTransform: "capitalize" }}>
                 {status}
               </Tabs.Trigger>
             ))}
           </Tabs.List>
-
-          <Tabs.Content value={filterStatus}>
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              </div>
-            ) : submissions.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 dark:text-gray-400">No submissions found</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {submissions.map((submission) => (
-                  <div
-                    key={submission.id}
-                    className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex items-center justify-center p-2 rounded-full bg-gray-50 dark:bg-gray-800">{actionIcons[submission.action as keyof typeof actionIcons]}</span>
-                        <div>
-                          <h3 className="font-semibold text-gray-900 dark:text-white capitalize">
-                            {submission.action} - {submission.collection}
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            by {submission.userName || submission.userEmail}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 text-xs font-medium rounded capitalize ${statusColors[submission.status]}`}>
-                          {submission.status}
-                        </span>
-                        {submission.status === "pending" && (
-                          <button
-                            onClick={() => setSelectedSubmission(submission)}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
-                          >
-                            Review
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {submission.data && (
-                      <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
-                        <pre className="text-sm text-gray-700 dark:text-gray-300 overflow-x-auto">
-                          {JSON.stringify(submission.data, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-
-                    <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-                      Submitted: {new Date(submission.createdAt).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Tabs.Content>
         </Tabs.Root>
-      </div>
+
+        {loading ? (
+          <Flex justify="center" py="9">
+            <Spinner size="3" />
+          </Flex>
+        ) : submissions.length === 0 ? (
+          <Flex justify="center" py="9">
+            <Text color="gray">No submissions found</Text>
+          </Flex>
+        ) : (
+          <Flex direction="column" gap="4">
+            {submissions.map((submission) => (
+              <Card key={submission.id} size="3">
+                <Flex justify="between" align="start" mb="3">
+                  <Flex align="center" gap="3">
+                    <Flex
+                      align="center"
+                      justify="center"
+                      p="2"
+                      style={{ borderRadius: "var(--radius-full)", background: "var(--gray-a3)" }}
+                    >
+                      {actionIcons[submission.action]}
+                    </Flex>
+                    <Box>
+                      <Heading size="3" highContrast style={{ textTransform: "capitalize" }}>
+                        {submission.action} - {submission.collection}
+                      </Heading>
+                      <Text size="2" color="gray">
+                        by {submission.userName || submission.userEmail}
+                      </Text>
+                    </Box>
+                  </Flex>
+                  <Flex align="center" gap="3">
+                    <Badge
+                      color={statusColors[submission.status]}
+                      variant="soft"
+                      style={{ textTransform: "capitalize" }}
+                    >
+                      {submission.status}
+                    </Badge>
+                    {submission.status === "pending" && (
+                      <Button
+                        size="2"
+                        onClick={() => setSelectedSubmission(submission)}
+                      >
+                        Review
+                      </Button>
+                    )}
+                  </Flex>
+                </Flex>
+
+                {submission.data && (
+                  <Box mt="3" p="3" style={{ background: "var(--gray-a2)", borderRadius: "var(--radius-2)" }}>
+                    <pre style={{ fontSize: "var(--font-size-2)", color: "var(--gray-11)", overflow: "auto", margin: 0 }}>
+                      {JSON.stringify(submission.data, null, 2)}
+                    </pre>
+                  </Box>
+                )}
+
+                <Box mt="3">
+                  <Text size="1" color="gray">
+                    Submitted: {new Date(submission.createdAt).toLocaleString()}
+                  </Text>
+                </Box>
+              </Card>
+            ))}
+          </Flex>
+        )}
+      </Container>
 
       {/* Review Dialog */}
       <Dialog.Root open={!!selectedSubmission} onOpenChange={() => setSelectedSubmission(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <Dialog.Title className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Review Submission
-            </Dialog.Title>
-            
-            {selectedSubmission && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center justify-center p-2 rounded-full bg-gray-50 dark:bg-gray-800">{actionIcons[selectedSubmission.action as keyof typeof actionIcons]}</span>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
-                      {selectedSubmission.action} - {selectedSubmission.collection}
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      by {selectedSubmission.userName || selectedSubmission.userEmail}
-                    </p>
-                  </div>
-                </div>
+        <Dialog.Content maxWidth="600px">
+          <Dialog.Title size="5">Review Submission</Dialog.Title>
+          
+          {selectedSubmission && (
+            <Flex direction="column" gap="4" mt="4">
+              <Flex align="center" gap="3">
+                <Flex
+                  align="center"
+                  justify="center"
+                  p="2"
+                  style={{ borderRadius: "var(--radius-full)", background: "var(--gray-a3)" }}
+                >
+                  {actionIcons[selectedSubmission.action]}
+                </Flex>
+                <Box>
+                  <Heading size="4" highContrast style={{ textTransform: "capitalize" }}>
+                    {selectedSubmission.action} - {selectedSubmission.collection}
+                  </Heading>
+                  <Text size="2" color="gray">
+                    by {selectedSubmission.userName || selectedSubmission.userEmail}
+                  </Text>
+                </Box>
+              </Flex>
 
-                {selectedSubmission.reason && (
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      <strong>Reason:</strong> {selectedSubmission.reason}
-                    </p>
-                  </div>
-                )}
+              {selectedSubmission.reason && (
+                <Card variant="surface">
+                  <Text size="2">
+                    <Text weight="bold">Reason:</Text> {selectedSubmission.reason}
+                  </Text>
+                </Card>
+              )}
 
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
-                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data:</h4>
-                  <pre className="text-sm text-gray-700 dark:text-gray-300 overflow-x-auto">
-                    {JSON.stringify(selectedSubmission.data, null, 2)}
-                  </pre>
-                </div>
+              <Box p="3" style={{ background: "var(--gray-a2)", borderRadius: "var(--radius-2)" }}>
+                <Text size="2" weight="medium" color="gray" mb="2" as="p">Data:</Text>
+                <pre style={{ fontSize: "var(--font-size-2)", color: "var(--gray-11)", overflow: "auto", margin: 0 }}>
+                  {JSON.stringify(selectedSubmission.data, null, 2)}
+                </pre>
+              </Box>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Admin Note (optional)
-                  </label>
-                  <textarea
-                    value={adminNote}
-                    onChange={(e) => setAdminNote(e.target.value)}
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+              <Box>
+                <Text as="label" size="2" weight="medium" mb="2">
+                  Admin Note (optional)
+                </Text>
+                <TextArea
+                  value={adminNote}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAdminNote(e.target.value)}
+                  rows={3}
+                  size="3"
+                />
+              </Box>
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={() => handleReview("approve")}
-                    disabled={actionLoading}
-                    className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading ? "Processing..." : "Approve"}
-                  </button>
-                  <button
-                    onClick={() => handleReview("reject")}
-                    disabled={actionLoading}
-                    className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading ? "Processing..." : "Reject"}
-                  </button>
-                  <button
-                    onClick={() => setSelectedSubmission(null)}
-                    className="py-2 px-4 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-medium rounded-md transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </Dialog.Content>
-        </Dialog.Portal>
+              <Flex gap="3">
+                <Button
+                  color="green"
+                  onClick={() => handleReview("approve")}
+                  disabled={actionLoading}
+                  size="3"
+                  style={{ flex: 1 }}
+                >
+                  {actionLoading ? "Processing..." : "Approve"}
+                </Button>
+                <Button
+                  color="red"
+                  onClick={() => handleReview("reject")}
+                  disabled={actionLoading}
+                  size="3"
+                  style={{ flex: 1 }}
+                >
+                  {actionLoading ? "Processing..." : "Reject"}
+                </Button>
+                <Button
+                  variant="soft"
+                  color="gray"
+                  onClick={() => setSelectedSubmission(null)}
+                  size="3"
+                >
+                  Cancel
+                </Button>
+              </Flex>
+            </Flex>
+          )}
+        </Dialog.Content>
       </Dialog.Root>
-    </div>
+    </Box>
   );
 }

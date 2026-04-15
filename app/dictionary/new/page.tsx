@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { createSubmission, CollectionType } from "@/lib/actions";
-import * as Select from "@radix-ui/react-select";
-import * as Label from "@radix-ui/react-label";
+import { createSubmission } from "@/lib/actions";
+import { Select, Button, Card, Heading, Text, Flex, Box, Container, Spinner, Callout, TextField } from "@radix-ui/themes";
+import { AlertCircle, Check } from "lucide-react";
 
 function DictionaryForm() {
   const { user } = useAuth();
@@ -59,162 +59,90 @@ function DictionaryForm() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="mb-4">
-            <svg className="mx-auto h-12 w-12 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Submission Created!</h2>
-          <p className="text-gray-600 dark:text-gray-400">Your suggestion is pending admin approval.</p>
-        </div>
-      </div>
+      <Flex minHeight="100vh" align="center" justify="center">
+        <Flex direction="column" align="center" gap="3">
+          <Check className="w-12 h-12" style={{ color: "var(--green-9)" }} />
+          <Heading size="5" highContrast>Submission Created!</Heading>
+          <Text color="gray">Your suggestion is pending admin approval.</Text>
+        </Flex>
+      </Flex>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Add New Word
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mb-8">
-          Submit a new Ilokano word. An admin will review before it's published.
-        </p>
+    <Box minHeight="100vh">
+      <Container size="2" px="4" py="6">
+        <Heading size="7" mb="1" highContrast>Add New Word</Heading>
+        <Text color="gray" size="3" as="p" mb="6">
+          Submit a new Ilokano word. An admin will review before it&apos;s published.
+        </Text>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-            <p className="text-red-800 dark:text-red-200">{error}</p>
-          </div>
+          <Callout.Root color="red" size="2" mb="4">
+            <Callout.Icon><AlertCircle className="w-4 h-4" /></Callout.Icon>
+            <Callout.Text>{error}</Callout.Text>
+          </Callout.Root>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-6 space-y-6">
-          <div>
-            <Label.Root htmlFor="ilokanoWord" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Ilokano Word *
-            </Label.Root>
-            <input
-              id="ilokanoWord"
-              type="text"
-              required
-              value={formData.ilokanoWord}
-              onChange={(e) => setFormData({ ...formData, ilokanoWord: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+        <Card size="3">
+          <form onSubmit={handleSubmit}>
+            <Flex direction="column" gap="4">
+              <Box>
+                <Text as="label" htmlFor="ilokanoWord" size="2" weight="medium" mb="1">Ilokano Word *</Text>
+                <TextField.Root id="ilokanoWord" required value={formData.ilokanoWord} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, ilokanoWord: e.target.value })} size="3" />
+              </Box>
 
-          <div>
-            <Label.Root htmlFor="englishTranslation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              English Translation *
-            </Label.Root>
-            <input
-              id="englishTranslation"
-              type="text"
-              required
-              value={formData.englishTranslation}
-              onChange={(e) => setFormData({ ...formData, englishTranslation: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+              <Box>
+                <Text as="label" htmlFor="englishTranslation" size="2" weight="medium" mb="1">English Translation *</Text>
+                <TextField.Root id="englishTranslation" required value={formData.englishTranslation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, englishTranslation: e.target.value })} size="3" />
+              </Box>
 
-          <div>
-            <Label.Root htmlFor="tagalogTranslation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Tagalog Translation *
-            </Label.Root>
-            <input
-              id="tagalogTranslation"
-              type="text"
-              required
-              value={formData.tagalogTranslation}
-              onChange={(e) => setFormData({ ...formData, tagalogTranslation: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+              <Box>
+                <Text as="label" htmlFor="tagalogTranslation" size="2" weight="medium" mb="1">Tagalog Translation *</Text>
+                <TextField.Root id="tagalogTranslation" required value={formData.tagalogTranslation} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, tagalogTranslation: e.target.value })} size="3" />
+              </Box>
 
-          <div>
-            <Label.Root htmlFor="partOfSpeech" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Part of Speech *
-            </Label.Root>
-            <Select.Root value={formData.partOfSpeech} onValueChange={(value) => setFormData({ ...formData, partOfSpeech: value })}>
-              <Select.Trigger className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 inline-flex items-center justify-between">
-                <Select.Value />
-                <Select.Icon>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </Select.Icon>
-              </Select.Trigger>
-              <Select.Portal>
-                <Select.Content className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg">
-                  <Select.Viewport className="p-1">
+              <Box>
+                <Text as="label" size="2" weight="medium" mb="1">Part of Speech *</Text>
+                <Select.Root value={formData.partOfSpeech} onValueChange={(value) => setFormData({ ...formData, partOfSpeech: value })}>
+                  <Select.Trigger style={{ width: "100%" }} />
+                  <Select.Content>
                     {["Noun", "Verb", "Adjective", "Adverb", "Pronoun", "Phrase", "Other"].map((pos) => (
-                      <Select.Item
-                        key={pos}
-                        value={pos}
-                        className="px-3 py-2 text-sm cursor-pointer rounded-md data-[highlighted]:bg-gray-100 dark:data-[highlighted]:bg-gray-800 outline-none"
-                      >
-                        <Select.ItemText>{pos.charAt(0).toUpperCase() + pos.slice(1)}</Select.ItemText>
-                      </Select.Item>
+                      <Select.Item key={pos} value={pos}>{pos}</Select.Item>
                     ))}
-                  </Select.Viewport>
-                </Select.Content>
-              </Select.Portal>
-            </Select.Root>
-          </div>
+                  </Select.Content>
+                </Select.Root>
+              </Box>
 
-          <div>
-            <Label.Root htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Category (optional)
-            </Label.Root>
-            <input
-              id="category"
-              type="text"
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+              <Box>
+                <Text as="label" htmlFor="category" size="2" weight="medium" mb="1">Category (optional)</Text>
+                <TextField.Root id="category" value={formData.category} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, category: e.target.value })} size="3" />
+              </Box>
 
-          <div>
-            <Label.Root htmlFor="tts_url" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              TTS URL (optional)
-            </Label.Root>
-            <input
-              id="tts_url"
-              type="url"
-              placeholder="https://..."
-              value={formData.tts_url}
-              onChange={(e) => setFormData({ ...formData, tts_url: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+              <Box>
+                <Text as="label" htmlFor="tts_url" size="2" weight="medium" mb="1">TTS URL (optional)</Text>
+                <TextField.Root id="tts_url" type="url" placeholder="https://..." value={formData.tts_url} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, tts_url: e.target.value })} size="3" />
+              </Box>
 
-          <div className="flex gap-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? "Submitting..." : "Submit for Review"}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="py-2 px-4 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-medium rounded-md transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+              <Flex gap="3">
+                <Button type="submit" disabled={loading} size="3" style={{ flex: 1 }}>
+                  {loading ? "Submitting..." : "Submit for Review"}
+                </Button>
+                <Button type="button" variant="soft" color="gray" size="3" onClick={() => router.back()}>
+                  Cancel
+                </Button>
+              </Flex>
+            </Flex>
+          </form>
+        </Card>
+      </Container>
+    </Box>
   );
 }
 
 export default function NewDictionaryPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
+    <Suspense fallback={<Flex minHeight="100vh" align="center" justify="center"><Spinner size="3" /></Flex>}>
       <DictionaryForm />
     </Suspense>
   );
