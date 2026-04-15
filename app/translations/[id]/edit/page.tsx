@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { createSubmission, getDocumentById } from "@/lib/actions";
+import { createSubmission, createAndAutoApproveSubmission, getDocumentById } from "@/lib/actions";
 import { Button, Card, Heading, Text, Flex, Box, Container, Spinner, Callout, TextField } from "@radix-ui/themes";
 import { AlertCircle, Check } from "lucide-react";
 
 export default function EditTranslationPage() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
@@ -17,6 +17,7 @@ export default function EditTranslationPage() {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [isDirectEdit, setIsDirectEdit] = useState(false);
 
   const [formData, setFormData] = useState({
     english: "",
@@ -59,12 +60,26 @@ export default function EditTranslationPage() {
     setError("");
 
     const token = await user.getIdToken();
-    const result = await createSubmission({
-      collection: "translations",
-      action: "update",
-      targetId: id,
-      data: formData,
-    }, token);
+
+    let result;
+    if (role === "admin") {
+      result = await createAndAutoApproveSubmission({
+        collection: "translations",
+        action: "update",
+        targetId: id,
+        data: formData,
+      }, token);
+      if (result.success) {
+        setIsDirectEdit(true);
+      }
+    } else {
+      result = await createSubmission({
+        collection: "translations",
+        action: "update",
+        targetId: id,
+        data: formData,
+      }, token);
+    }
 
     setLoading(false);
 
@@ -91,8 +106,12 @@ export default function EditTranslationPage() {
       <Flex minHeight="100vh" align="center" justify="center">
         <Flex direction="column" align="center" gap="3">
           <Check className="w-12 h-12" style={{ color: "var(--green-9)" }} />
-          <Heading size="5" highContrast>Edit Submitted!</Heading>
-          <Text color="gray">Your changes are pending admin approval.</Text>
+          <Heading size="5" highContrast>
+            {isDirectEdit ? "Changes Saved!" : "Edit Submitted!"}
+          </Heading>
+          <Text color="gray">
+            {isDirectEdit ? "Your changes have been applied directly." : "Your changes are pending admin approval."}
+          </Text>
         </Flex>
       </Flex>
     );
@@ -103,7 +122,9 @@ export default function EditTranslationPage() {
       <Container size="2" px="4" py="6">
         <Heading size="7" mb="1" highContrast>Edit Translation</Heading>
         <Text color="gray" size="3" as="p" mb="6">
-          Suggest changes to this translation. An admin will review before changes are published.
+          {role === "admin"
+            ? "Make changes to this translation. Changes are applied immediately."
+            : "Suggest changes to this translation. An admin will review before changes are published."}
         </Text>
 
         {error && (
@@ -133,7 +154,7 @@ export default function EditTranslationPage() {
 
               <Flex gap="3">
                 <Button type="submit" disabled={loading} size="3" style={{ flex: 1 }}>
-                  {loading ? "Submitting..." : "Submit Changes"}
+                  {loading ? (role === "admin" ? "Saving..." : "Submitting...") : (role === "admin" ? "Save Changes" : "Submit Changes")}
                 </Button>
                 <Button type="button" variant="soft" color="gray" size="3" onClick={() => router.back()}>
                   Cancel

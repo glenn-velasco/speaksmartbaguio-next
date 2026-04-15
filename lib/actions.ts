@@ -37,9 +37,9 @@ async function getAuthenticatedUser(token: string): Promise<AuthenticatedUser | 
 
 export async function createSubmission(submission: SubmissionData, authToken: string) {
   try {
-    // Require authenticated user (any role)
+
     const user = await getAuthenticatedUser(authToken);
-    
+
     if (!user) {
       return { success: false, error: "Authentication required. Please log in." };
     }
@@ -63,6 +63,111 @@ export async function createSubmission(submission: SubmissionData, authToken: st
     return { success: true, id: docRef.id, message: "Submission created successfully" };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to create submission" };
+  }
+}
+
+/**
+ * Create a submission and auto-approve it for admins.
+ * The submission is recorded in the dashboard for audit trail, but applied immediately.
+ */
+export async function createAndAutoApproveSubmission(submission: SubmissionData, authToken: string) {
+  try {
+    const user = await getAuthenticatedUser(authToken);
+
+    if (!user) {
+      return { success: false, error: "Authentication required. Please log in." };
+    }
+
+    if (user.role !== "admin") {
+      return { success: false, error: "Admin privileges required." };
+    }
+
+    const submissionData = {
+      ...submission,
+      userId: user.uid,
+      userEmail: user.email,
+      userName: user.displayName,
+      status: "approved" as SubmissionStatus,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      adminNote: "Auto-approved (admin edit)",
+      reviewedBy: user.uid,
+      reviewedByEmail: user.email,
+      reviewedByName: user.displayName,
+      reviewedAt: new Date().toISOString(),
+    };
+
+    const docRef = await adminDb.collection("submissions").add(submissionData);
+
+    // Apply the change immediately
+    await applySubmission(submissionData);
+
+    revalidatePath("/dashboard");
+    revalidatePath(`/${submission.collection}`);
+    if (submission.targetId) {
+      revalidatePath(`/${submission.collection}/${submission.targetId}`);
+      revalidatePath(`/${submission.collection}/${submission.targetId}/edit`);
+    }
+    return { success: true, id: docRef.id, message: "Changes saved successfully" };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to save changes" };
+  }
+}
+
+/**
+ * Direct CRUD operations for admins (no approval workflow)
+ * Admins can create, update, and delete items directly
+ */
+export async function directCrudAction(
+  collection: CollectionType,
+  action: "create" | "update" | "delete",
+  data: any,
+  targetId?: string,
+  authToken?: string
+): Promise<{ success: boolean; id?: string; message: string; error?: string }> {
+  try {
+    // Require admin role
+    if (authToken) {
+      const user = await getAuthenticatedUser(authToken);
+      if (!user) {
+        return { success: false, error: "Authentication required", message: "Authentication required" };
+      }
+      if (user.role !== "admin") {
+        return { success: false, error: "Admin privileges required", message: "Admin privileges required" };
+      }
+    }
+
+    switch (action) {
+      case "create": {
+        const docRef = await adminDb.collection(collection).add(data);
+        revalidatePath(`/${collection}`);
+        revalidatePath(`/${collection}/new`);
+        return { success: true, id: docRef.id, message: `${collection} entry created successfully` };
+      }
+      case "update": {
+        if (!targetId) {
+          return { success: false, error: "Target ID required for update", message: "Target ID required for update" };
+        }
+        await adminDb.collection(collection).doc(targetId).update(data);
+        revalidatePath(`/${collection}`);
+        revalidatePath(`/${collection}/${targetId}`);
+        revalidatePath(`/${collection}/${targetId}/edit`);
+        return { success: true, message: `${collection} entry updated successfully` };
+      }
+      case "delete": {
+        if (!targetId) {
+          return { success: false, error: "Target ID required for delete", message: "Target ID required for delete" };
+        }
+        await adminDb.collection(collection).doc(targetId).delete();
+        revalidatePath(`/${collection}`);
+        revalidatePath(`/${collection}/${targetId}`);
+        return { success: true, message: `${collection} entry deleted successfully` };
+      }
+      default:
+        return { success: false, error: "Invalid action", message: "Invalid action" };
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message || `Failed to ${action} ${collection} entry`, message: error.message || `Failed to ${action} ${collection} entry` };
   }
 }
 

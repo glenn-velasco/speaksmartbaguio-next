@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { createSubmission, getDocumentById } from "@/lib/actions";
+import { createSubmission, createAndAutoApproveSubmission, getDocumentById } from "@/lib/actions";
 import { Select, Button, Card, Heading, Text, Flex, Box, Container, Spinner, Callout, TextField } from "@radix-ui/themes";
 import { AlertCircle, Check } from "lucide-react";
+import { AudioUploadInput } from "@/components/AudioUploadInput";
+import { AudioPreview } from "@/components/AudioPreview";
 
 export default function EditPhrasebookPage() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
@@ -17,6 +19,7 @@ export default function EditPhrasebookPage() {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [isDirectEdit, setIsDirectEdit] = useState(false);
 
   const [formData, setFormData] = useState({
     ilokanoWord: "",
@@ -55,6 +58,18 @@ export default function EditPhrasebookPage() {
     return null;
   }
 
+  const handleUploadComplete = (audioUrl: string) => {
+    setFormData({ ...formData, tts_url: audioUrl });
+  };
+
+  const handleUploadError = (errorMsg: string) => {
+    setError(errorMsg);
+  };
+
+  const handleRemoveAudio = () => {
+    setFormData({ ...formData, tts_url: "" });
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
@@ -63,12 +78,26 @@ export default function EditPhrasebookPage() {
     setError("");
 
     const token = await user.getIdToken();
-    const result = await createSubmission({
-      collection: "phrasebook",
-      action: "update",
-      targetId: id,
-      data: formData,
-    }, token);
+
+    let result;
+    if (role === "admin") {
+      result = await createAndAutoApproveSubmission({
+        collection: "phrasebook",
+        action: "update",
+        targetId: id,
+        data: formData,
+      }, token);
+      if (result.success) {
+        setIsDirectEdit(true);
+      }
+    } else {
+      result = await createSubmission({
+        collection: "phrasebook",
+        action: "update",
+        targetId: id,
+        data: formData,
+      }, token);
+    }
 
     setLoading(false);
 
@@ -95,8 +124,12 @@ export default function EditPhrasebookPage() {
       <Flex minHeight="100vh" align="center" justify="center">
         <Flex direction="column" align="center" gap="3">
           <Check className="w-12 h-12" style={{ color: "var(--green-9)" }} />
-          <Heading size="5" highContrast>Edit Submitted!</Heading>
-          <Text color="gray">Your changes are pending admin approval.</Text>
+          <Heading size="5" highContrast>
+            {isDirectEdit ? "Changes Saved!" : "Edit Submitted!"}
+          </Heading>
+          <Text color="gray">
+            {isDirectEdit ? "Your changes have been applied directly." : "Your changes are pending admin approval."}
+          </Text>
         </Flex>
       </Flex>
     );
@@ -148,8 +181,39 @@ export default function EditPhrasebookPage() {
               </Box>
 
               <Box>
-                <Text as="label" htmlFor="tts_url" size="2" weight="medium" mb="1">TTS URL (optional)</Text>
-                <TextField.Root id="tts_url" type="url" placeholder="https://..." value={formData.tts_url} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, tts_url: e.target.value })} size="3" />
+                <Text size="2" weight="medium" mb="2">TTS Audio (optional)</Text>
+                <Flex direction="column" gap="3">
+                  {formData.tts_url ? (
+                    <>
+                      <AudioPreview
+                        audioUrl={formData.tts_url}
+                        label="Current Audio"
+                        onRemove={handleRemoveAudio}
+                      />
+                      <AudioUploadInput
+                        collection="phrasebook"
+                        itemId={id}
+                        onUploadComplete={handleUploadComplete}
+                        onUploadError={handleUploadError}
+                        currentAudioUrl={formData.tts_url}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <AudioUploadInput
+                        collection="phrasebook"
+                        itemId={id}
+                        onUploadComplete={handleUploadComplete}
+                        onUploadError={handleUploadError}
+                      />
+                    </>
+                  )}
+                  <Text size="1" color="gray">
+                    {formData.tts_url
+                      ? "Upload a new file to replace the current audio"
+                      : "Upload an audio file (MP3, WAV, OGG, M4A, FLAC) for pronunciation"}
+                  </Text>
+                </Flex>
               </Box>
 
               <Flex gap="3">

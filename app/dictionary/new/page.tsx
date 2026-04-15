@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { createSubmission } from "@/lib/actions";
 import { Select, Button, Card, Heading, Text, Flex, Box, Container, Spinner, Callout, TextField } from "@radix-ui/themes";
 import { AlertCircle, Check } from "lucide-react";
+import { AudioUploadInput } from "@/components/AudioUploadInput";
+import { AudioPreview } from "@/components/AudioPreview";
 
 function DictionaryForm() {
   const { user } = useAuth();
@@ -16,6 +18,7 @@ function DictionaryForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [uploadedAudioUrl, setUploadedAudioUrl] = useState("");
 
   const [formData, setFormData] = useState({
     ilokanoWord: initialWord || "",
@@ -30,6 +33,20 @@ function DictionaryForm() {
     router.push("/login");
     return null;
   }
+
+  const handleUploadComplete = (audioUrl: string) => {
+    setUploadedAudioUrl(audioUrl);
+    setFormData({ ...formData, tts_url: audioUrl });
+  };
+
+  const handleUploadError = (errorMsg: string) => {
+    setError(errorMsg);
+  };
+
+  const handleRemoveAudio = () => {
+    setFormData({ ...formData, tts_url: "" });
+    setUploadedAudioUrl("");
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -120,8 +137,28 @@ function DictionaryForm() {
               </Box>
 
               <Box>
-                <Text as="label" htmlFor="tts_url" size="2" weight="medium" mb="1">TTS URL (optional)</Text>
-                <TextField.Root id="tts_url" type="url" placeholder="https://..." value={formData.tts_url} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, tts_url: e.target.value })} size="3" />
+                <Text size="2" weight="medium" mb="2">TTS Audio (optional)</Text>
+                <Flex direction="column" gap="3">
+                  {formData.tts_url ? (
+                    <>
+                      <AudioPreview
+                        audioUrl={formData.tts_url}
+                        label="Uploaded Audio"
+                        onRemove={handleRemoveAudio}
+                      />
+                    </>
+                  ) : (
+                    <AudioUploadInput
+                      collection="dictionary"
+                      itemId="new"
+                      onUploadComplete={handleUploadComplete}
+                      onUploadError={handleUploadError}
+                    />
+                  )}
+                  <Text size="1" color="gray">
+                    Upload an audio file (MP3, WAV, OGG, M4A, FLAC) for pronunciation
+                  </Text>
+                </Flex>
               </Box>
 
               <Flex gap="3">

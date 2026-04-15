@@ -10,13 +10,15 @@ A production-ready API backend built with Next.js, Firebase Firestore, and TypeS
 - 🪵 **Observable**: Structured JSON logging (production-ready for OnRender)
 - ♻️ **DRY**: Generic CRUD factory — add new endpoints in ~10 lines
 - 🏥 **Monitored**: Health check endpoint for uptime monitoring
+- 🎵 **Audio Upload**: TTS audio file upload with S3/Firebase Storage, waveform preview, and auto cleanup
 
 ## Tech Stack
 
 - **Framework**: Next.js 16 (App Router)
 - **Database**: Firebase Firestore
 - **Validation**: Zod v4
-- **Styling**: Tailwind CSS 4
+- **Styling**: Tailwind CSS 4, Radix UI
+- **Storage**: S3 (IDrive E2) + Firebase Storage
 - **Deployment**: OnRender
 
 ## Getting Started
@@ -40,6 +42,15 @@ Required variables:
 - `NEXT_PUBLIC_FIREBASE_*` — Firebase client config (from console)
 - `NEXT_PUBLIC_API_KEY` — Your secret API key (generate with `openssl rand -base64 32`)
 - `ALLOWED_ORIGINS` — Comma-separated CORS origins (`*` for dev only)
+
+#### Optional: Audio Upload Configuration
+
+For TTS audio upload with S3 (IDrive E2):
+- `S3_ACCESS_KEY_ID`, `S3_ACCESS_KEY_SECRET` — S3 credentials
+- `S3_BUCKET_NAME`, `S3_ENDPOINT` — S3 bucket configuration
+- `STORAGE_BACKEND` — Storage preference: `s3`, `firebase`, or `auto`
+
+See [Audio Upload Documentation](docs/AUDIO_UPLOAD.md) for complete setup guide.
 
 ### 3. Run Development Server
 
@@ -127,23 +138,40 @@ Use `/api/health` for OnRender's health check monitoring.
 ├── app/
 │   ├── api/
 │   │   ├── v1/
-│   │   │   ├── dictionary/     # Dictionary CRUD
-│   │   │   ├── phrasebook/     # Phrasebook CRUD
-│   │   │   └── translations/   # Translations CRUD
-│   │   └── health/             # Health check
+│   │   │   ├── dictionary/         # Dictionary CRUD
+│   │   │   ├── phrasebook/         # Phrasebook CRUD
+│   │   │   ├── translations/       # Translations CRUD
+│   │   │   └── upload/             # Audio upload endpoints
+│   │   │       ├── route.ts        # Generate presigned URL
+│   │   │       └── complete/       # Complete upload
+│   │   └── health/                 # Health check
+│   ├── dashboard/                  # Admin dashboard
+│   ├── dictionary/                 # Dictionary pages
+│   ├── phrasebook/                 # Phrasebook pages
 │   ├── layout.tsx
-│   ├── page.tsx                # API dashboard
-│   ├── error.tsx               # Error boundary
-│   └── loading.tsx             # Loading state
+│   ├── page.tsx                    # API dashboard
+│   ├── error.tsx                   # Error boundary
+│   └── loading.tsx                 # Loading state
+├── components/
+│   ├── AudioPlayButton.tsx         # Audio playback button
+│   ├── AudioUploadInput.tsx        # Audio upload component
+│   └── AudioPreview.tsx            # Audio preview with waveform
 ├── lib/
-│   ├── api-handler.ts          # Generic CRUD factory
-│   ├── cache.ts                # In-memory caching
-│   ├── firebase-admin.ts       # Firebase admin SDK
-│   ├── logger.ts               # Structured logging
-│   ├── pagination.ts           # Pagination utilities
-│   └── response.ts             # Response helpers
-├── proxy.ts                    # Middleware (CORS, auth, rate limit)
-└── .env.example                # Environment template
+│   ├── api-handler.ts              # Generic CRUD factory
+│   ├── audio-cleanup.ts            # Audio file cleanup
+│   ├── audio-validation.ts         # Audio validation utilities
+│   ├── cache.ts                    # In-memory caching
+│   ├── firebase-admin.ts           # Firebase admin SDK
+│   ├── firebase-storage.ts         # Firebase Storage client
+│   ├── logger.ts                   # Structured logging
+│   ├── pagination.ts               # Pagination utilities
+│   ├── response.ts                 # Response helpers
+│   ├── s3-client.ts                # S3 client (IDrive E2)
+│   └── storage.ts                  # Unified storage abstraction
+├── docs/
+│   └── AUDIO_UPLOAD.md             # Audio upload documentation
+├── proxy.ts                        # Middleware (CORS, auth, rate limit)
+└── .env.example                    # Environment template
 ```
 
 ## License

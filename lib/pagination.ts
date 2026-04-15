@@ -38,7 +38,6 @@ export function buildPaginationResult<T>(
   };
 }
 
-// Build Firestore startAfter query using cursor
 export async function applyCursor<T>(
   query: FirebaseFirestore.CollectionReference | FirebaseFirestore.Query,
   cursor: string,

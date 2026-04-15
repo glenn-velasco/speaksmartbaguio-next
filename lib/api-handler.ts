@@ -15,6 +15,7 @@ import {
 import { parsePaginationParams } from "@/lib/pagination";
 import { requireEditorOrAdmin, requireAdmin, verifyToken } from "@/lib/auth-server";
 import { UserRole } from "@/lib/user-roles";
+import { cleanupOldAudioFile } from "@/lib/audio-cleanup";
 
 export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema extends z.ZodType> {
   collection: string;
@@ -196,8 +197,12 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
 
       const newDocRef = await adminDb.collection(collection).add(validData as Record<string, unknown>);
 
-      // Invalidate cache
-      cache.invalidatePattern(`/api/v1/${collection}`);
+      // Get the created document and add to cache
+      const newDoc = await newDocRef.get();
+      const newItem = { id: newDocRef.id, ...newDoc.data() };
+
+      // Smart cache update: add new item to existing cached lists
+      cache.addItemToCollection(collection, newItem);
 
       logger.info("Document created", {
         collection,
@@ -248,10 +253,32 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         return notFoundResponse("Document");
       }
 
+      // Check if tts_url is being changed and cleanup old file
+      const oldData = docSnapshot.data();
+      const oldTtsUrl = oldData?.tts_url;
+      const newTtsUrl = updateData.tts_url;
+
+      if (oldTtsUrl && newTtsUrl && oldTtsUrl !== newTtsUrl) {
+        logger.info("TTS URL changed, cleaning up old file", {
+          collection,
+          id,
+          oldUrl: oldTtsUrl,
+          newUrl: newTtsUrl,
+        });
+        const cleanupResult = await cleanupOldAudioFile(collection, id, oldTtsUrl);
+        if (!cleanupResult.success) {
+          logger.warn("Cleanup warning", { collection, id, message: cleanupResult.message });
+        }
+      }
+
       await docRef.update(updateData);
 
-      // Invalidate cache
-      cache.invalidatePattern(`/api/v1/${collection}`);
+      // Get updated document and update cache
+      const updatedDoc = await docRef.get();
+      const updatedItem = { id, ...updatedDoc.data() };
+
+      // Smart cache update: update item in existing cached lists
+      cache.updateItemInCollection(collection, id, updatedItem);
 
       logger.info("Document updated", {
         collection,
@@ -300,10 +327,24 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         return notFoundResponse("Document");
       }
 
+      // Cleanup associated audio file if exists
+      const docData = docSnapshot.data();
+      if (docData?.tts_url) {
+        logger.info("Cleaning up audio file on document deletion", {
+          collection,
+          id,
+          audioUrl: docData.tts_url,
+        });
+        const cleanupResult = await cleanupOldAudioFile(collection, id, docData.tts_url);
+        if (!cleanupResult.success) {
+          logger.warn("Cleanup warning", { collection, id, message: cleanupResult.message });
+        }
+      }
+
       await docRef.delete();
 
-      // Invalidate cache
-      cache.invalidatePattern(`/api/v1/${collection}`);
+      // Smart cache removal: remove item from existing cached lists
+      cache.removeItemFromCollection(collection, id);
 
       logger.info("Document deleted", {
         collection,

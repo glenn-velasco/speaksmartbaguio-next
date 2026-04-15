@@ -31,7 +31,6 @@ function log(level: LogLevel, message: string, context?: Record<string, unknown>
   const entry = formatLogEntry(level, message, context);
 
   if (process.env.NODE_ENV === "production") {
-    // Structured JSON logging for production (OnRender, etc.)
     const output = JSON.stringify(entry);
     switch (level) {
       case "error":
@@ -44,7 +43,6 @@ function log(level: LogLevel, message: string, context?: Record<string, unknown>
         console.log(output);
     }
   } else {
-    // Human-readable logging for development
     const prefix = `[${entry.timestamp}] ${level.toUpperCase()}`;
     const contextStr = context ? `\n${JSON.stringify(context, null, 2)}` : "";
     switch (level) {

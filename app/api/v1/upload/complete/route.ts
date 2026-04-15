@@ -1,0 +1,83 @@
+import { NextRequest } from "next/server";
+import { requireEditorOrAdmin } from "@/lib/auth-server";
+import { badRequestResponse, successResponse, errorResponse, notFoundResponse } from "@/lib/response";
+import { getAccessUrl, isStorageConfigured } from "@/lib/storage";
+import { adminDb } from "@/lib/firebase-admin";
+import { cache } from "@/lib/cache";
+import { cleanupOldAudioFile } from "@/lib/audio-cleanup";
+import { z } from "zod";
+
+const completeUploadSchema = z.object({
+  collection: z.enum(["dictionary", "phrasebook", "translations"]),
+  itemId: z.string().min(1),
+  key: z.string().min(1),
+  accessUrl: z.string().optional(),
+});
+
+export async function POST(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get("authorization");
+    const authResult = await requireEditorOrAdmin(authHeader);
+
+    if ("error" in authResult) {
+      return errorResponse(authResult.status, authResult.error);
+    }
+
+    if (!isStorageConfigured()) {
+      return errorResponse(500, "Storage is not configured.");
+    }
+
+    const body = await request.json();
+    const validation = completeUploadSchema.safeParse(body);
+
+    if (!validation.success) {
+      return badRequestResponse("Invalid request body", validation.error.message);
+    }
+
+    const { collection, itemId, key, accessUrl } = validation.data;
+
+    const docRef = adminDb.collection(collection).doc(itemId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return notFoundResponse(`${collection} item`);
+    }
+
+    const oldData = doc.data();
+    const oldTtsUrl = oldData?.tts_url;
+
+    if (oldTtsUrl) {
+      console.log(`Cleaning up old audio file for ${collection}/${itemId}`);
+      const cleanupResult = await cleanupOldAudioFile(collection, itemId, oldTtsUrl);
+      if (!cleanupResult.success) {
+        console.warn(`Cleanup warning: ${cleanupResult.message}`);
+      }
+    }
+
+    // Get the public access URL if not already provided
+    let finalUrl = accessUrl;
+    if (!finalUrl || finalUrl.startsWith("firebase://") || finalUrl.startsWith("/")) {
+      finalUrl = await getAccessUrl(key);
+    }
+
+    await docRef.update({
+      tts_url: finalUrl,
+      updated_at: new Date().toISOString(),
+    });
+
+    const updatedDoc = await docRef.get();
+    const updatedItem = { id: itemId, ...updatedDoc.data() };
+
+    cache.updateItemInCollection(collection, itemId, updatedItem);
+
+    return successResponse({
+      success: true,
+      audioUrl: finalUrl,
+      message: oldTtsUrl ? "Upload completed and old file deleted" : "Upload completed successfully",
+      oldFileDeleted: !!oldTtsUrl,
+    });
+  } catch (error) {
+    console.error("Upload completion error:", error);
+    return errorResponse(500, "Failed to complete upload", "INTERNAL_ERROR", error);
+  }
+}
