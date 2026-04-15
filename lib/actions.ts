@@ -1,9 +1,10 @@
 "use server";
 
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireAdmin, AuthenticatedUser, verifyToken } from "@/lib/auth-server";
 import { setUserRole } from "@/lib/admin-roles";
+import { UserRole } from "@/lib/user-roles";
 
 export type SubmissionAction = "create" | "update" | "delete";
 export type CollectionType = "dictionary" | "phrasebook" | "translations" | "roles";
@@ -337,5 +338,184 @@ async function applySubmission(submission: any) {
       }
       break;
     }
+  }
+}
+
+/**
+ * Get all users with optional filtering and pagination.
+ * Admin only.
+ */
+export async function getAllUsers(options?: {
+  role?: UserRole;
+  searchQuery?: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  try {
+    const allUsers: any[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const listUsersResult = await adminAuth.listUsers(options?.limit || 100, pageToken);
+      allUsers.push(...listUsersResult.users.map((user) => ({
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        emailVerified: user.emailVerified,
+        createdAt: user.metadata.creationTime,
+        lastSignIn: user.metadata.lastSignInTime,
+        role: "viewer" as UserRole,
+      })));
+      pageToken = listUsersResult.pageToken;
+    } while (pageToken);
+
+    let users = allUsers;
+
+    if (options?.searchQuery) {
+      const searchQuery = options.searchQuery.toLowerCase();
+      users = users.filter((user) => {
+        const email = (user.email || "").toLowerCase();
+        const displayName = (user.displayName || "").toLowerCase();
+        return email.includes(searchQuery) || displayName.includes(searchQuery);
+      });
+    }
+
+    console.log(`Loaded ${users.length} users from Authentication`);
+    return users;
+  } catch (error: any) {
+    console.error("Failed to get users:", error);
+    throw new Error(`Failed to get users: ${error.message}`);
+  }
+}
+
+/**
+ * Update a user's role directly (without submission workflow).
+ * Admin only.
+ */
+export async function updateUserRoleDirect(
+  targetUserId: string,
+  newRole: UserRole,
+  authToken: string
+) {
+  try {
+    const user = await getAuthenticatedUser(authToken);
+
+    if (!user) {
+      return { success: false, error: "Authentication required. Please log in." };
+    }
+
+    if (user.role !== "admin") {
+      return { success: false, error: "Admin privileges required." };
+    }
+
+    // Verify target user exists
+    try {
+      await adminAuth.getUser(targetUserId);
+    } catch {
+      return { success: false, error: "User not found" };
+    }
+
+    // Update custom claims
+    await setUserRole(targetUserId, newRole);
+
+    // Update Firestore profile (for display purposes)
+    try {
+      await adminDb.collection("users").doc(targetUserId).set(
+        { role: newRole, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+    } catch (e) {
+      // Ignored if user profile doesn't exist
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/users");
+
+    return {
+      success: true,
+      message: `User role updated to ${newRole}`,
+      uid: targetUserId,
+      role: newRole,
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to update user role" };
+  }
+}
+
+/**
+ * Delete a user account.
+ * Admin only.
+ */
+export async function deleteUserAccount(targetUserId: string, authToken: string) {
+  try {
+    const user = await getAuthenticatedUser(authToken);
+
+    if (!user) {
+      return { success: false, error: "Authentication required. Please log in." };
+    }
+
+    if (user.role !== "admin") {
+      return { success: false, error: "Admin privileges required." };
+    }
+
+    // Prevent admin from deleting themselves
+    if (targetUserId === user.uid) {
+      return { success: false, error: "Cannot delete your own account" };
+    }
+
+    // Verify target user exists
+    try {
+      await adminAuth.getUser(targetUserId);
+    } catch {
+      return { success: false, error: "User not found" };
+    }
+
+    // Delete from Firebase Auth
+    await adminAuth.deleteUser(targetUserId);
+
+    // Delete from Firestore
+    try {
+      await adminDb.collection("users").doc(targetUserId).delete();
+    } catch (e) {
+      // Ignored if user profile doesn't exist
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/users");
+
+    return {
+      success: true,
+      message: "User deleted successfully",
+      uid: targetUserId,
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to delete user" };
+  }
+}
+
+/**
+ * Get pending role requests (submissions with collection="roles").
+ */
+export async function getRoleRequests(status?: SubmissionStatus) {
+  try {
+    let query = adminDb
+      .collection("submissions")
+      .where("collection", "==", "roles")
+      .orderBy("createdAt", "desc");
+
+    if (status) {
+      query = query.where("status", "==", status);
+    }
+
+    const snapshot = await query.limit(50).get();
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+  } catch (error: any) {
+    console.error("Failed to get role requests:", error);
+    return [];
   }
 }

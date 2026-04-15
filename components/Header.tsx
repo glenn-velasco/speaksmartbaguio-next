@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { DropdownMenu, Button, Avatar, Flex, Text, Box } from "@radix-ui/themes";
 import { createSubmission } from "@/lib/actions";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Edit } from "lucide-react";
 
 export function Header() {
   const { user, logout, role } = useAuth();
@@ -84,7 +85,13 @@ export function Header() {
                         onSelect={async (e: Event) => {
                           e.preventDefault();
                           if (!user) return;
-                          const confirmed = window.confirm("Would you like to request to become an editor? Admins will review your request.");
+
+                          const confirmed = window.confirm(
+                            "Would you like to request editor access?\n\n" +
+                            "This will submit a request for admin review. " +
+                            "An admin will review and approve your request if appropriate.\n\n" +
+                            "Note: You'll need to log out and log back in after approval for the new role to take effect."
+                          );
                           if (!confirmed) return;
 
                           try {
@@ -94,20 +101,26 @@ export function Header() {
                               action: "update",
                               targetId: user.uid,
                               data: { role: "editor" },
-                              reason: "Requested editor access",
+                              reason: "Requested editor access via header menu",
                             }, token);
 
                             if (result.success) {
-                              alert("Editor role request submitted successfully!");
+                              alert("✓ Editor role request submitted successfully!\n\n" +
+                                "An admin will review your request. " +
+                                "You'll be able to see the status in your dashboard once approved.");
                             } else {
-                              alert(result.error || "Failed to submit role request");
+                              alert("✗ " + (result.error || "Failed to submit role request"));
                             }
-                          } catch (err) {
-                            alert("An error occurred while submitting the request.");
+                          } catch (err: any) {
+                            alert("✗ An error occurred while submitting the request:\n" + 
+                              (err?.message || "Unknown error"));
                           }
                         }}
                       >
-                        Request Editor Access
+                        <Flex align="center" gap="2">
+                          <Edit className="w-4 h-4" />
+                          Request Editor Access
+                        </Flex>
                       </DropdownMenu.Item>
                       <DropdownMenu.Separator />
                     </>

@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, redirect } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { getSubmissions, reviewSubmission, SubmissionStatus, CollectionType } from "@/lib/actions";
+import { getSubmissions, reviewSubmission, SubmissionStatus, CollectionType, getRoleRequests } from "@/lib/actions";
 import { Tabs, Dialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, Spinner, TextArea } from "@radix-ui/themes";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, UserCheck } from "lucide-react";
+import Link from "next/link";
+import { RoleRequestsPanel } from "@/components/RoleRequestsPanel";
 
 interface Submission {
   id: string;
@@ -25,6 +27,7 @@ interface Submission {
 export default function AdminDashboard() {
   const { user, role, loading: authLoading } = useAuth();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"submissions" | "users" | "role-requests">("submissions");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<SubmissionStatus | "all">("all");
@@ -36,7 +39,7 @@ export default function AdminDashboard() {
     if (authLoading) return;
 
     if (!user) {
-      router.push("/login");
+      redirect("/login");
       return;
     }
 
@@ -57,7 +60,7 @@ export default function AdminDashboard() {
 
   async function handleReview(action: "approve" | "reject") {
     if (!selectedSubmission || !user) return;
-    
+
     setActionLoading(true);
     const token = await user.getIdToken();
     const result = await reviewSubmission(selectedSubmission.id, action, token, adminNote || undefined);
@@ -104,90 +107,144 @@ export default function AdminDashboard() {
           <Text color="gray" size="3">Review and manage user submissions</Text>
         </Box>
 
-        <Tabs.Root value={filterStatus} onValueChange={(value) => setFilterStatus(value as any)}>
+        {/* Top-level navigation tabs */}
+        <Tabs.Root value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
           <Tabs.List size="2" mb="5">
-            {["all", "pending", "approved", "rejected"].map((status) => (
-              <Tabs.Trigger key={status} value={status} style={{ textTransform: "capitalize" }}>
-                {status}
-              </Tabs.Trigger>
-            ))}
+            <Tabs.Trigger value="submissions">
+              <Flex align="center" gap="2">
+                <Plus className="w-4 h-4" />
+                Submissions
+              </Flex>
+            </Tabs.Trigger>
+            <Tabs.Trigger value="users">
+              <Flex align="center" gap="2">
+                <Users className="w-4 h-4" />
+                Users
+              </Flex>
+            </Tabs.Trigger>
+            <Tabs.Trigger value="role-requests">
+              <Flex align="center" gap="2">
+                <UserCheck className="w-4 h-4" />
+                Role Requests
+              </Flex>
+            </Tabs.Trigger>
           </Tabs.List>
-        </Tabs.Root>
 
-        {loading ? (
-          <Flex justify="center" py="9">
-            <Spinner size="3" />
-          </Flex>
-        ) : submissions.length === 0 ? (
-          <Flex justify="center" py="9">
-            <Text color="gray">No submissions found</Text>
-          </Flex>
-        ) : (
-          <Flex direction="column" gap="4">
-            {submissions.map((submission) => (
-              <Card key={submission.id} size="3">
-                <Flex justify="between" align="start" mb="3">
-                  <Flex align="center" gap="3">
-                    <Flex
-                      align="center"
-                      justify="center"
-                      p="2"
-                      style={{ borderRadius: "var(--radius-full)", background: "var(--gray-a3)" }}
-                    >
-                      {actionIcons[submission.action]}
+          {/* Submissions Tab */}
+          <Tabs.Content value="submissions">
+            {/* Filter controls for submissions */}
+            <Flex gap="2" mb="4">
+              <Tabs.Root value={filterStatus} onValueChange={(value) => setFilterStatus(value as any)}>
+                <Tabs.List size="2">
+                  {["all", "pending", "approved", "rejected"].map((status) => (
+                    <Tabs.Trigger key={status} value={status} style={{ textTransform: "capitalize" }}>
+                      {status}
+                    </Tabs.Trigger>
+                  ))}
+                </Tabs.List>
+              </Tabs.Root>
+            </Flex>
+
+            {loading ? (
+              <Flex justify="center" py="9">
+                <Spinner size="3" />
+              </Flex>
+            ) : submissions.length === 0 ? (
+              <Flex justify="center" py="9">
+                <Text color="gray">No submissions found</Text>
+              </Flex>
+            ) : (
+              <Flex direction="column" gap="4">
+                {submissions.map((submission) => (
+                  <Card key={submission.id} size="3">
+                    <Flex justify="between" align="start" mb="3">
+                      <Flex align="center" gap="3">
+                        <Flex
+                          align="center"
+                          justify="center"
+                          p="2"
+                          style={{ borderRadius: "var(--radius-full)", background: "var(--gray-a3)" }}
+                        >
+                          {actionIcons[submission.action]}
+                        </Flex>
+                        <Box>
+                          <Heading size="3" highContrast style={{ textTransform: "capitalize" }}>
+                            {submission.action} - {submission.collection}
+                          </Heading>
+                          <Text size="2" color="gray">
+                            by {submission.userName || submission.userEmail}
+                          </Text>
+                        </Box>
+                      </Flex>
+                      <Flex align="center" gap="3">
+                        <Badge
+                          color={statusColors[submission.status]}
+                          variant="soft"
+                          style={{ textTransform: "capitalize" }}
+                        >
+                          {submission.status}
+                        </Badge>
+                        {submission.status === "pending" && (
+                          <Button
+                            size="2"
+                            onClick={() => setSelectedSubmission(submission)}
+                          >
+                            Review
+                          </Button>
+                        )}
+                      </Flex>
                     </Flex>
-                    <Box>
-                      <Heading size="3" highContrast style={{ textTransform: "capitalize" }}>
-                        {submission.action} - {submission.collection}
-                      </Heading>
-                      <Text size="2" color="gray">
-                        by {submission.userName || submission.userEmail}
+
+                    {submission.data && (
+                      <Box mt="3" p="3" style={{ background: "var(--gray-a2)", borderRadius: "var(--radius-2)" }}>
+                        <pre style={{ fontSize: "var(--font-size-2)", color: "var(--gray-11)", overflow: "auto", margin: 0 }}>
+                          {JSON.stringify(submission.data, null, 2)}
+                        </pre>
+                      </Box>
+                    )}
+
+                    <Box mt="3">
+                      <Text size="1" color="gray">
+                        Submitted: {new Date(submission.createdAt).toLocaleString()}
                       </Text>
                     </Box>
-                  </Flex>
-                  <Flex align="center" gap="3">
-                    <Badge
-                      color={statusColors[submission.status]}
-                      variant="soft"
-                      style={{ textTransform: "capitalize" }}
-                    >
-                      {submission.status}
-                    </Badge>
-                    {submission.status === "pending" && (
-                      <Button
-                        size="2"
-                        onClick={() => setSelectedSubmission(submission)}
-                      >
-                        Review
-                      </Button>
-                    )}
-                  </Flex>
-                </Flex>
+                  </Card>
+                ))}
+              </Flex>
+            )}
+          </Tabs.Content>
 
-                {submission.data && (
-                  <Box mt="3" p="3" style={{ background: "var(--gray-a2)", borderRadius: "var(--radius-2)" }}>
-                    <pre style={{ fontSize: "var(--font-size-2)", color: "var(--gray-11)", overflow: "auto", margin: 0 }}>
-                      {JSON.stringify(submission.data, null, 2)}
-                    </pre>
-                  </Box>
-                )}
+          {/* Users Tab */}
+          <Tabs.Content value="users">
+            <Card>
+              <Flex direction="column" align="center" gap="3" py="6">
+                <Users className="w-12 h-12" style={{ color: "var(--accent-9)" }} />
+                <Heading size="4" highContrast>User Management</Heading>
+                <Text size="2" color="gray" mb="2">
+                  Manage user roles and permissions
+                </Text>
+                <Button size="3" onClick={() => router.push("/dashboard/users")}>
+                  <Flex align="center" gap="2">
+                    <Users className="w-4 h-4" />
+                    Go to User Management
+                  </Flex>
+                </Button>
+              </Flex>
+            </Card>
+          </Tabs.Content>
 
-                <Box mt="3">
-                  <Text size="1" color="gray">
-                    Submitted: {new Date(submission.createdAt).toLocaleString()}
-                  </Text>
-                </Box>
-              </Card>
-            ))}
-          </Flex>
-        )}
+          {/* Role Requests Tab */}
+          <Tabs.Content value="role-requests">
+            <RoleRequestsPanel />
+          </Tabs.Content>
+        </Tabs.Root>
       </Container>
 
       {/* Review Dialog */}
       <Dialog.Root open={!!selectedSubmission} onOpenChange={() => setSelectedSubmission(null)}>
         <Dialog.Content maxWidth="600px">
           <Dialog.Title size="5">Review Submission</Dialog.Title>
-          
+
           {selectedSubmission && (
             <Flex direction="column" gap="4" mt="4">
               <Flex align="center" gap="3">

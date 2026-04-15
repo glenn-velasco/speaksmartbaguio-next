@@ -1,0 +1,50 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "submissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "collection",
+          "order": "ASC"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESC"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "submissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "collection",
+          "order": "ASC"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASC"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESC"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "submissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASC"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESC"
+        }
+      ]
+    }
+  ]
+}
