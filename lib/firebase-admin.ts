@@ -1,26 +1,24 @@
 import * as admin from "firebase-admin";
 
+
 if (!admin.apps.length) {
 
     try {
 
+        var serviceAccount = require("../speaksmart-baguio-firebase-adminsdk-fbsvc-015b2c876d.json");
+
         admin.initializeApp({
-            credential: admin.credential.cert({
-                projectId: process.env.FIREBASE_PROJECT_ID,
-                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-                privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-            }),
+            credential: admin.credential.cert(serviceAccount),
         });
 
     } catch (error) {
-        
+
         console.error("Firebase admin initialization error", error);
     }
 
 }
 
 const adminDb = admin.firestore();
-
 const adminAuth = admin.auth();
 
-export { adminDb, adminAuth };
+export { adminDb, adminAuth, admin };

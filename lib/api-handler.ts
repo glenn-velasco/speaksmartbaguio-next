@@ -9,8 +9,12 @@ import {
   badRequestResponse,
   conflictResponse,
   serverErrorResponse,
+  unauthorizedResponse,
+  forbiddenResponse,
 } from "@/lib/response";
 import { parsePaginationParams } from "@/lib/pagination";
+import { requireEditorOrAdmin, requireAdmin, verifyToken } from "@/lib/auth-server";
+import { UserRole } from "@/lib/user-roles";
 
 export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema extends z.ZodType> {
   collection: string;
@@ -19,6 +23,16 @@ export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema
   uniqueField?: string;
   cacheTTL?: number;
   filterableFields?: string[];
+  /**
+   * Required role for POST/PUT operations.
+   * Default: ["editor", "admin"]
+   */
+  writeRole?: UserRole | UserRole[];
+  /**
+   * Required role for DELETE operations.
+   * Default: ["admin"]
+   */
+  deleteRole?: UserRole | UserRole[];
 }
 
 type SafeParseResult<T extends z.ZodType> =
@@ -146,9 +160,19 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     }
   }
 
-  // POST: Create new entry
+  // POST: Create new entry (requires editor or admin)
   async function POST(request: NextRequest) {
     try {
+      // Check authentication and role
+      const authHeader = request.headers.get("authorization");
+      const authResult = await requireEditorOrAdmin(authHeader);
+
+      if ("error" in authResult) {
+        return authResult.status === 401
+          ? unauthorizedResponse(authResult.error)
+          : forbiddenResponse(authResult.error);
+      }
+
       const body = await parseRequestBody(request);
       const validation = safeParseSchema(createSchema, body);
 
@@ -175,7 +199,12 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       // Invalidate cache
       cache.invalidatePattern(`/api/v1/${collection}`);
 
-      logger.info("Document created", { collection, id: newDocRef.id });
+      logger.info("Document created", {
+        collection,
+        id: newDocRef.id,
+        userId: authResult.uid,
+        userRole: authResult.role,
+      });
 
       return successResponse({ id: newDocRef.id, ...(validData as Record<string, unknown>) }, 201);
     } catch (error) {
@@ -190,9 +219,19 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     }
   }
 
-  // PUT: Update existing entry
+  // PUT: Update existing entry (requires editor or admin)
   async function PUT(request: NextRequest) {
     try {
+      // Check authentication and role
+      const authHeader = request.headers.get("authorization");
+      const authResult = await requireEditorOrAdmin(authHeader);
+
+      if ("error" in authResult) {
+        return authResult.status === 401
+          ? unauthorizedResponse(authResult.error)
+          : forbiddenResponse(authResult.error);
+      }
+
       const body = await parseRequestBody(request);
       const validation = safeParseSchema(updateSchema, body);
 
@@ -214,7 +253,12 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       // Invalidate cache
       cache.invalidatePattern(`/api/v1/${collection}`);
 
-      logger.info("Document updated", { collection, id });
+      logger.info("Document updated", {
+        collection,
+        id,
+        userId: authResult.uid,
+        userRole: authResult.role,
+      });
 
       return successResponse({ message: "Entry updated successfully", id });
     } catch (error) {
@@ -229,9 +273,19 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     }
   }
 
-  // DELETE: Remove entry
+  // DELETE: Remove entry (requires admin only)
   async function DELETE(request: NextRequest) {
     try {
+      // Check authentication and role (admin only)
+      const authHeader = request.headers.get("authorization");
+      const authResult = await requireAdmin(authHeader);
+
+      if ("error" in authResult) {
+        return authResult.status === 401
+          ? unauthorizedResponse(authResult.error)
+          : forbiddenResponse(authResult.error);
+      }
+
       const searchParams = request.nextUrl.searchParams;
       const id = searchParams.get("id");
 
@@ -251,7 +305,12 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       // Invalidate cache
       cache.invalidatePattern(`/api/v1/${collection}`);
 
-      logger.info("Document deleted", { collection, id });
+      logger.info("Document deleted", {
+        collection,
+        id,
+        userId: authResult.uid,
+        userRole: authResult.role,
+      });
 
       return successResponse({ message: "Entry deleted successfully", id });
     } catch (error) {

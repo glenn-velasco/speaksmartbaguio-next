@@ -9,7 +9,7 @@
    npm run dev
    ```
 
-2. Ensure your `.env.local` is configured with valid Firebase credentials and an `API_SECRET_KEY`.
+2. Ensure your `.env.local` is configured with valid Firebase credentials and an `NEXT_PUBLIC_API_KEY`.
 
 ---
 
@@ -64,7 +64,7 @@ TEST_BASE_URL=http://localhost:3000 TEST_API_KEY=your-key npm test
 ### Setup
 
 1. Select the **Local** environment
-2. Update the `api_key` variable with your `API_SECRET_KEY` from `.env.local`
+2. Update the `api_key` variable with your `NEXT_PUBLIC_API_KEY` from `.env.local`
 3. Update `base_url` if different from `http://localhost:3000`
 
 ### Run Collection
@@ -164,7 +164,7 @@ Use this checklist for QA before production deployment.
 - [ ] Unicode/special characters in Ilokano words work
 - [ ] Rapid sequential POSTs don't create duplicates
 - [ ] Rate limiting triggers 429 after exceeding limit
-- [ ] App fails gracefully if `API_SECRET_KEY` missing
+- [ ] App fails gracefully if `NEXT_PUBLIC_API_KEY` missing
 - [ ] App fails gracefully if Firebase credentials invalid
 
 ---
@@ -248,10 +248,10 @@ jobs:
       - run: npm test
         env:
           TEST_BASE_URL: http://localhost:3000
-          TEST_API_KEY: ${{ secrets.API_SECRET_KEY }}
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
-          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          TEST_API_KEY: ${{ secrets.NEXT_PUBLIC_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL: ${{ secrets.NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL }}
+          NEXT_PUBLIC_FIREBASE_PRIVATE_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_PRIVATE_KEY }}
 ```
 
 ---
@@ -262,7 +262,7 @@ jobs:
 - Ensure `npm run dev` is running on the correct port
 
 ### Tests fail with 403 on all endpoints
-- Verify `TEST_API_KEY` matches `API_SECRET_KEY` in `.env.local`
+- Verify `TEST_API_KEY` matches `NEXT_PUBLIC_API_KEY` in `.env.local`
 
 ### Health check returns `status: "degraded"`
 - Check Firebase credentials in `.env.local`

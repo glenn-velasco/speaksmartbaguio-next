@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const API_KEY = process.env.TEST_API_KEY || "test-api-key";
 
-interface ApiResponse<T = unknown> {
+interface ApiResponse<T = any> {
   data?: T;
   error?: string;
   code?: string;
@@ -17,7 +17,7 @@ interface ApiResponse<T = unknown> {
   timestamp?: string;
 }
 
-function apiRequest<T>(
+function apiRequest<T = any>(
   path: string,
   options: {
     method?: string;
@@ -179,7 +179,7 @@ describe("Speak Smart Baguio API", () => {
       const res = await apiRequest(`/api/v1/${collection}?limit=5`);
       expect(res.status).toBe(200);
       const json = await res.json();
-      expect(json.data).toBeAn<Array<unknown>>();
+      expect(Array.isArray(json.data)).toBe(true);
       expect(json.hasMore).toBeDefined();
       expect(json.total).toBeDefined();
       if (json.data) {
@@ -314,7 +314,7 @@ describe("Speak Smart Baguio API", () => {
       const res = await apiRequest(`/api/v1/${collection}?limit=10`);
       expect(res.status).toBe(200);
       const json = await res.json();
-      expect(json.data).toBeAn<Array<unknown>>();
+      expect(Array.isArray(json.data)).toBe(true);
       expect(json.hasMore).toBeDefined();
     });
 
@@ -373,7 +373,7 @@ describe("Speak Smart Baguio API", () => {
       const res = await apiRequest(`/api/v1/${collection}?limit=10`);
       expect(res.status).toBe(200);
       const json = await res.json();
-      expect(json.data).toBeAn<Array<unknown>>();
+      expect(Array.isArray(json.data)).toBe(true);
       expect(json.hasMore).toBeDefined();
     });
 

@@ -36,9 +36,9 @@ cp .env.example .env.local
 ```
 
 Required variables:
-- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` — Firebase Admin SDK credentials
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL`, `NEXT_PUBLIC_FIREBASE_PRIVATE_KEY` — Firebase Admin SDK credentials
 - `NEXT_PUBLIC_FIREBASE_*` — Firebase client config (from console)
-- `API_SECRET_KEY` — Your secret API key (generate with `openssl rand -base64 32`)
+- `NEXT_PUBLIC_API_KEY` — Your secret API key (generate with `openssl rand -base64 32`)
 - `ALLOWED_ORIGINS` — Comma-separated CORS origins (`*` for dev only)
 
 ### 3. Run Development Server
@@ -98,11 +98,11 @@ That's it — full CRUD with caching, pagination, validation, and logging.
 
 | Variable | Description | Required |
 |---|---|---|
-| `FIREBASE_PROJECT_ID` | Firebase project ID | Yes |
-| `FIREBASE_CLIENT_EMAIL` | Firebase admin service account email | Yes |
-| `FIREBASE_PRIVATE_KEY` | Firebase admin private key | Yes |
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase client API key | Yes |
-| `API_SECRET_KEY` | Secret key for API authentication | Yes |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase project ID | Yes |
+| `NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL` | Firebase admin service account email | Yes |
+| `NEXT_PUBLIC_FIREBASE_PRIVATE_KEY` | Firebase admin private key | Yes |
+| `FIREBASE_API_KEY` | Firebase client API key | Yes |
+| `NEXT_PUBLIC_API_KEY` | Secret key for API authentication | Yes |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | Yes |
 | `RATE_LIMIT_MAX_REQUESTS` | Max requests per IP per minute | No (default: 100) |
 | `PROTECTED_PATHS` | Paths requiring API key (comma-separated) | No (default: /api) |

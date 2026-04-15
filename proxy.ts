@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createHash, timingSafeEqual } from "crypto";
+import { adminAuth } from "@/lib/firebase-admin";
 import { logger } from "@/lib/logger";
 
 // Configurable protected paths
@@ -62,8 +63,29 @@ setInterval(() => {
     }
 }, RATE_LIMIT_WINDOW_MS * 2);
 
-export function proxy(request: NextRequest) {
+/**
+ * Verify Firebase ID token and return decoded claims.
+ * Returns null if token is invalid or missing.
+ */
+async function verifyFirebaseToken(authHeader: string | null): Promise<any | null> {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return null;
+    }
+
+    const token = authHeader.slice(7);
+
+    try {
+        const decodedToken = await adminAuth.verifyIdToken(token);
+        return decodedToken;
+    } catch (error: any) {
+        logger.warn("Firebase token verification failed", { error: error.message });
+        return null;
+    }
+}
+
+export async function proxy(request: NextRequest) {
     const origin = request.headers.get("origin");
+    const authHeader = request.headers.get("authorization");
     const apiKey = request.headers.get("x-api-key");
     const validApiKey = process.env.API_SECRET_KEY as string;
     const isAllowedOrigin = checkOrigin(origin);
@@ -95,24 +117,70 @@ export function proxy(request: NextRequest) {
         return new NextResponse(null, { status: 204, headers: preflightHeaders });
     }
 
-    // API key validation for protected paths
+    // Authentication: Support both Firebase token and API key
     const isProtectedPath = PROTECTED_PATHS.some((path) =>
         request.nextUrl.pathname.startsWith(path)
     );
 
     if (isProtectedPath) {
-        if (!apiKey || !secureCompare(apiKey, validApiKey)) {
-            logger.warn("Invalid API key attempt", { ip, path: request.nextUrl.pathname });
+        let isAuthenticated = false;
+        let userId: string | null = null;
+        let userRole: string | null = null;
+
+        // Method 1: Verify Firebase ID token (preferred for client requests)
+        if (authHeader) {
+            const decodedToken = await verifyFirebaseToken(authHeader);
+            if (decodedToken) {
+                isAuthenticated = true;
+                userId = decodedToken.uid;
+                userRole = decodedToken.role || "viewer";
+            }
+        }
+
+        // Method 2: Fall back to API key (for external tools like Postman)
+        if (!isAuthenticated && apiKey && validApiKey && secureCompare(apiKey, validApiKey)) {
+            isAuthenticated = true;
+            userId = "api_key_user";
+            userRole = "api_key";
+        }
+
+        // Reject if neither method succeeded
+        if (!isAuthenticated) {
+            logger.warn("Authentication failed", {
+                ip,
+                path: request.nextUrl.pathname,
+                hasAuthHeader: !!authHeader,
+                hasApiKey: !!apiKey,
+            });
             return NextResponse.json(
-                { error: "Forbidden: Invalid or missing API Key" },
+                { error: "Forbidden: Invalid or missing authentication" },
                 { status: 403 }
             );
         }
+
+        // Attach user info to headers for downstream use
+        const response = NextResponse.next();
+        if (userId) {
+            response.headers.set("X-User-Id", userId);
+            response.headers.set("X-User-Role", userRole || "viewer");
+            response.headers.set("X-Auth-Method", authHeader ? "firebase_token" : "api_key");
+        }
+
+        // Set CORS headers
+        if (isAllowedOrigin) {
+            response.headers.set("Access-Control-Allow-Origin", origin || "*");
+        }
+
+        response.headers.set("Vary", "Origin");
+        response.headers.set("Access-Control-Allow-Methods", ALLOWED_METHODS);
+        response.headers.set("Access-Control-Allow-Headers", ALLOWED_HEADERS);
+
+        return response;
     }
 
+    // Non-protected paths: just add CORS headers
     const response = NextResponse.next();
 
-    // Set CORS headers (only once, after validation)
     if (isAllowedOrigin) {
         response.headers.set("Access-Control-Allow-Origin", origin || "*");
     }
