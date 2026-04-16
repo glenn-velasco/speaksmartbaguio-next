@@ -9,7 +9,7 @@ import { AlertDialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, 
 import { AudioPlayButton } from "@/components/AudioPlayButton";
 
 export default function PhrasebookDetailPage() {
-  const { user, role } = useAuth();
+  const { user, hasPermission } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
@@ -93,13 +93,13 @@ export default function PhrasebookDetailPage() {
 
             {user && (
               <Flex gap="2">
-                {(role === 'admin' || role === 'editor') && (
+                {hasPermission("phrasebook:edit") && (
                   <Button asChild variant="soft" color="orange">
                     <Link href={`/phrasebook/${id}/edit`}>Edit</Link>
                   </Button>
                 )}
 
-                {role === 'admin' && (
+                {hasPermission("phrasebook:delete") && (
                   <AlertDialog.Root>
                     <AlertDialog.Trigger>
                       <Button variant="soft" color="red">Delete</Button>
@@ -143,3 +143,4 @@ export default function PhrasebookDetailPage() {
     </Box>
   );
 }
+

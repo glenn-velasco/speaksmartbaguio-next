@@ -1,5 +1,7 @@
-import { adminAuth } from "@/lib/firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { UserRole } from "@/lib/user-roles";
+import { Permission, DEFAULT_ROLE_PERMISSIONS } from "@/lib/permissions";
+import { cache } from "@/lib/cache";
 
 export interface AuthenticatedUser {
   uid: string;
@@ -14,6 +16,59 @@ export interface AuthError {
   status: number;
 }
 
+const PERMISSIONS_CACHE_TTL = 300_000; // 5 minutes
+
+/**
+ * Get permissions for a specific role from Firestore, with fallback to defaults.
+ */
+export async function getPermissionsForRole(role: UserRole): Promise<Permission[]> {
+  const cacheKey = `permissions:${role}`;
+  const cached = cache.get<Permission[]>(cacheKey);
+  
+  if (cached) return cached;
+
+  try {
+    const doc = await adminDb.collection("roles").doc(role).get();
+    
+    if (doc.exists) {
+      const data = doc.data();
+      if (data && Array.isArray(data.permissions)) {
+        const permissions = data.permissions as Permission[];
+        cache.set(cacheKey, permissions, PERMISSIONS_CACHE_TTL);
+        return permissions;
+      }
+    }
+    
+    const defaultPermissions = DEFAULT_ROLE_PERMISSIONS[role] || [];
+    
+    try {
+      await adminDb.collection("roles").doc(role).set({
+        permissions: defaultPermissions,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch {
+      console.warn(`Failed to initialize default permissions for role: ${role}`);
+    }
+
+    cache.set(cacheKey, defaultPermissions, PERMISSIONS_CACHE_TTL);
+    return defaultPermissions;
+  } catch (error) {
+    console.error(`Error fetching permissions for role ${role}:`, error);
+    return DEFAULT_ROLE_PERMISSIONS[role] || [];
+  }
+}
+
+/**
+ * Check if a user has a specific permission.
+ */
+export async function hasPermission(
+  user: AuthenticatedUser,
+  permission: Permission
+): Promise<boolean> {
+  const permissions = await getPermissionsForRole(user.role);
+  return permissions.includes(permission);
+}
+
 /**
  * Verify Firebase ID token and return authenticated user info.
  * @param authHeader - "Bearer <token>" or just the token string
@@ -26,7 +81,6 @@ export async function verifyToken(
     return { error: "Missing authentication token", status: 401 };
   }
 
-  // Extract token from "Bearer <token>" format
   const token = authHeader.startsWith("Bearer ")
     ? authHeader.slice(7)
     : authHeader;
@@ -36,10 +90,9 @@ export async function verifyToken(
   }
 
   try {
-    // Verify the ID token with Firebase Admin SDK
+
     const decodedToken = await adminAuth.verifyIdToken(token);
 
-    // Extract role from custom claims (defaults to "viewer" if not set)
     const role: UserRole = decodedToken.role || "viewer";
 
     return {
@@ -73,6 +126,31 @@ export async function requireAuth(
   }
 
   return result;
+}
+
+/**
+ * Require specific permission - returns error if user doesn't have it.
+ */
+export async function requirePermission(
+  authHeader: string | null,
+  permission: Permission
+): Promise<AuthenticatedUser | AuthError> {
+  const authResult = await requireAuth(authHeader);
+
+  if ("error" in authResult) {
+    return authResult;
+  }
+
+  const allowed = await hasPermission(authResult, permission);
+
+  if (!allowed) {
+    return {
+      error: `Insufficient permissions. Required: ${permission}`,
+      status: 403,
+    };
+  }
+
+  return authResult;
 }
 
 /**

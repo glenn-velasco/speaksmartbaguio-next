@@ -9,7 +9,7 @@ import { AlertDialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, 
 import { AudioPlayButton } from "@/components/AudioPlayButton";
 
 export default function DictionaryDetailPage() {
-  const { user, role } = useAuth();
+  const { user, hasPermission } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
@@ -95,13 +95,13 @@ export default function DictionaryDetailPage() {
 
             {user && (
               <Flex gap="2">
-                {(role === 'admin' || role === 'editor') && (
+                {hasPermission("dictionary:edit") && (
                   <Button asChild variant="soft" color="orange">
                     <Link href={`/dictionary/${id}/edit`}>Edit</Link>
                   </Button>
                 )}
 
-                {role === 'admin' && (
+                {hasPermission("dictionary:delete") && (
                   <AlertDialog.Root>
                     <AlertDialog.Trigger>
                       <Button variant="soft" color="red">Delete</Button>

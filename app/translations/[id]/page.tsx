@@ -8,7 +8,7 @@ import { createSubmission, getItemById } from "@/lib/actions";
 import { AlertDialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, Spinner, DataList } from "@radix-ui/themes";
 
 export default function TranslationDetailPage() {
-  const { user, role } = useAuth();
+  const { user, hasPermission } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
@@ -87,17 +87,18 @@ export default function TranslationDetailPage() {
 
             {user && (
               <Flex gap="2">
-                {(role === 'admin' || role === 'editor') && (
+                {hasPermission("translations:edit") && (
                   <Button asChild variant="soft" color="orange">
                     <Link href={`/translations/${id}/edit`}>Edit</Link>
                   </Button>
                 )}
 
-                {role === 'admin' && (
+                {hasPermission("translations:delete") && (
                   <AlertDialog.Root>
                     <AlertDialog.Trigger>
                       <Button variant="soft" color="red">Delete</Button>
                     </AlertDialog.Trigger>
+
                     <AlertDialog.Content maxWidth="450px">
                       <AlertDialog.Title>Delete this translation?</AlertDialog.Title>
                       <AlertDialog.Description size="2">

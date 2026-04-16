@@ -21,7 +21,7 @@ interface PhrasebookItem {
 }
 
 export default function PhrasebookPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [items, setItems] = useState<PhrasebookItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -79,7 +79,7 @@ export default function PhrasebookPage() {
             <Heading size="7" mb="1" highContrast>Phrasebook</Heading>
             <Text color="gray" size="3">Common Ilokano phrases and expressions</Text>
           </Box>
-          {user && (
+          {hasPermission("phrasebook:create") && (
             <Button asChild size="2">
               <Link href={`/phrasebook/new${searchTerm ? `?phrase=${encodeURIComponent(searchTerm)}` : ''}`}>
                 Add Phrase

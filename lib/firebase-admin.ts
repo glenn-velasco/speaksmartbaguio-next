@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+require('dotenv').config({ path: '.env' });
 
 let adminInitialized = false;
 

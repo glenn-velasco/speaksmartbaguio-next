@@ -37,6 +37,59 @@ async function getAuthenticatedUser(token: string): Promise<AuthenticatedUser | 
   }
 }
 
+import { Permission } from "./permissions";
+
+/**
+ * Get permissions for all roles.
+ */
+export async function getAllRolePermissions() {
+  try {
+    const roles = ["admin", "editor", "viewer"];
+    const results: Record<string, Permission[]> = {};
+
+    for (const role of roles) {
+      const doc = await adminDb.collection("roles").doc(role).get();
+      if (doc.exists) {
+        results[role] = doc.data()?.permissions || [];
+      } else {
+        const { DEFAULT_ROLE_PERMISSIONS } = await import("./permissions");
+        results[role] = DEFAULT_ROLE_PERMISSIONS[role] || [];
+      }
+    }
+
+    return results;
+  } catch (error) {
+    console.error("Failed to get role permissions:", error);
+    return {};
+  }
+}
+
+/**
+ * Update permissions for a role.
+ */
+export async function updateRolePermissions(role: string, permissions: Permission[], authToken: string) {
+  try {
+    const user = await getAuthenticatedUser(authToken);
+
+    if (!user || user.role !== "admin") {
+      return { success: false, error: "Admin privileges required." };
+    }
+
+    await adminDb.collection("roles").doc(role).set({
+      permissions,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user.uid,
+    }, { merge: true });
+
+    cache.invalidate(`permissions:${role}`);
+
+    revalidatePath("/dashboard");
+    return { success: true, message: `Permissions for ${role} updated successfully` };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to update permissions" };
+  }
+}
+
 export async function createSubmission(submission: SubmissionData, authToken: string): Promise<{ success: boolean; id?: string; itemId?: string; message?: string; error?: string }> {
   try {
 
@@ -526,6 +579,17 @@ export async function deleteUserAccount(targetUserId: string, authToken: string)
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to delete user" };
   }
+}
+
+/**
+ * Get pending role requests (submissions with collection="roles").
+ */
+/**
+ * Get permissions for a specific role (client-side helper).
+ */
+export async function getRolePermissions(role: UserRole): Promise<Permission[]> {
+  const { getPermissionsForRole } = await import("./auth-server");
+  return getPermissionsForRole(role);
 }
 
 /**

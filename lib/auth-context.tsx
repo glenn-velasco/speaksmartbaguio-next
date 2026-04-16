@@ -13,11 +13,15 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { UserRole } from "@/lib/user-roles";
+import { Permission } from "@/lib/permissions";
+import { getRolePermissions } from "@/lib/actions";
 
 interface AuthContextType {
   user: User | null;
   role: UserRole | null;
+  permissions: Permission[];
   loading: boolean;
+  hasPermission: (permission: Permission) => boolean;
   signUp: (email: string, password: string) => Promise<User>;
   login: (email: string, password: string) => Promise<User>;
   loginWithGoogle: () => Promise<User>;
@@ -33,6 +37,7 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,15 +46,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (user) {
         try {
-          // Force refresh token to get latest custom claims
           const tokenResult = await getIdTokenResult(user, true);
-          setRole((tokenResult.claims.role as UserRole) || "viewer");
+          const userRole = (tokenResult.claims.role as UserRole) || "viewer";
+          setRole(userRole);
+
+          const rolePerms = await getRolePermissions(userRole);
+          setPermissions(rolePerms);
         } catch (error) {
-          console.error("Error fetching user role:", error);
+          console.error("Error fetching user role/permissions:", error);
           setRole("viewer");
+          setPermissions(["dictionary:view", "phrasebook:view", "translations:view"]);
         }
       } else {
         setRole(null);
+        setPermissions([]);
       }
       
       setLoading(false);
@@ -78,10 +88,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
   }
 
+  const hasPermission = (permission: Permission): boolean => {
+    return permissions.includes(permission);
+  };
+
   const value = {
     user,
     role,
+    permissions,
     loading,
+    hasPermission,
     signUp,
     login,
     loginWithGoogle,

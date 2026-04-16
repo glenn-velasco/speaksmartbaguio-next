@@ -13,7 +13,8 @@ import {
   forbiddenResponse,
 } from "@/lib/response";
 import { parsePaginationParams } from "@/lib/pagination";
-import { requireEditorOrAdmin, requireAdmin, verifyToken } from "@/lib/auth-server";
+import { requirePermission, verifyToken } from "@/lib/auth-server";
+import { Permission } from "@/lib/permissions";
 import { UserRole } from "@/lib/user-roles";
 import { cleanupOldAudioFile } from "@/lib/audio-cleanup";
 
@@ -25,15 +26,20 @@ export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema
   cacheTTL?: number;
   filterableFields?: string[];
   /**
-   * Required role for POST/PUT operations.
-   * Default: ["editor", "admin"]
+   * Required permission for POST operations.
+   * Default: <collection>:create
    */
-  writeRole?: UserRole | UserRole[];
+  createPermission?: Permission;
   /**
-   * Required role for DELETE operations.
-   * Default: ["admin"]
+   * Required permission for PUT operations.
+   * Default: <collection>:edit
    */
-  deleteRole?: UserRole | UserRole[];
+  updatePermission?: Permission;
+  /**
+   * Required permission for DELETE operations.
+   * Default: <collection>:delete
+   */
+  deletePermission?: Permission;
 }
 
 type SafeParseResult<T extends z.ZodType> =
@@ -106,7 +112,14 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     uniqueField,
     cacheTTL = DEFAULT_CACHE_TTL,
     filterableFields = [],
+    createPermission,
+    updatePermission,
+    deletePermission,
   } = options;
+
+  const resolvedCreatePermission: Permission = createPermission || `${collection}:create` as Permission;
+  const resolvedUpdatePermission: Permission = updatePermission || `${collection}:edit` as Permission;
+  const resolvedDeletePermission: Permission = deletePermission || `${collection}:delete` as Permission;
 
   async function GET(request: NextRequest) {
     try {
@@ -170,11 +183,11 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     }
   }
 
-  // POST: Create new entry (requires editor or admin)
+  // POST: Create new entry
   async function POST(request: NextRequest) {
     try {
       const authHeader = request.headers.get("authorization");
-      const authResult = await requireEditorOrAdmin(authHeader);
+      const authResult = await requirePermission(authHeader, resolvedCreatePermission);
 
       if ("error" in authResult) {
         return authResult.status === 401
@@ -228,12 +241,12 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     }
   }
 
-  // PUT: Update existing entry (requires editor or admin)
+  // PUT: Update existing entry
   async function PUT(request: NextRequest) {
     try {
 
       const authHeader = request.headers.get("authorization");
-      const authResult = await requireEditorOrAdmin(authHeader);
+      const authResult = await requirePermission(authHeader, resolvedUpdatePermission);
 
       if ("error" in authResult) {
         return authResult.status === 401
@@ -299,12 +312,11 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     }
   }
 
-  // DELETE: Remove entry (requires admin only)
+  // DELETE: Remove entry
   async function DELETE(request: NextRequest) {
     try {
-      // Check authentication and role (admin only)
       const authHeader = request.headers.get("authorization");
-      const authResult = await requireAdmin(authHeader);
+      const authResult = await requirePermission(authHeader, resolvedDeletePermission);
 
       if ("error" in authResult) {
         return authResult.status === 401
@@ -326,7 +338,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         return notFoundResponse("Document");
       }
 
-      // Cleanup associated audio file if exists
       const docData = docSnapshot.data();
       if (docData?.tts_url) {
         logger.info("Cleaning up audio file on document deletion", {
@@ -342,7 +353,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
 
       await docRef.delete();
 
-      // Smart cache removal: remove item from existing cached lists
       cache.removeItemFromCollection(collection, id);
 
       logger.info("Document deleted", {

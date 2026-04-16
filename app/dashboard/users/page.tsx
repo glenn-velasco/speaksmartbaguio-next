@@ -22,7 +22,7 @@ interface User {
 }
 
 export default function UsersDashboardPage() {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, hasPermission, loading: authLoading } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +36,7 @@ export default function UsersDashboardPage() {
       return;
     }
 
-    if (role !== "admin") {
+    if (!hasPermission("users:view")) {
       router.push("/");
       return;
     }
@@ -55,7 +55,7 @@ export default function UsersDashboardPage() {
     }
 
     fetchUsers();
-  }, [user, role, authLoading, router]);
+  }, [user, hasPermission, authLoading, router]);
 
   if (authLoading || loading) {
     return (
@@ -65,7 +65,7 @@ export default function UsersDashboardPage() {
     );
   }
 
-  if (!user || role !== "admin") {
+  if (!user || !hasPermission("users:view")) {
     return null;
   }
 

@@ -8,6 +8,8 @@ import { Tabs, Dialog, Button, Card, Heading, Text, Badge, Flex, Box, Container,
 import { Plus, Pencil, Trash2, Users, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { RoleRequestsPanel } from "@/components/RoleRequestsPanel";
+import { RolesPermissionsPanel } from "@/components/RolesPermissionsPanel";
+import { Shield } from "lucide-react";
 
 interface Submission {
   id: string;
@@ -25,9 +27,10 @@ interface Submission {
 }
 
 export default function AdminDashboard() {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, hasPermission, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"submissions" | "users" | "role-requests">("submissions");
+
+  const [activeTab, setActiveTab] = useState<"submissions" | "users" | "role-requests" | "permissions">("submissions");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<SubmissionStatus | "all">("all");
@@ -43,7 +46,12 @@ export default function AdminDashboard() {
       return;
     }
 
-    if (role !== "admin") {
+    const canAccessDashboard = 
+      hasPermission("submissions:review") || 
+      hasPermission("users:view") || 
+      hasPermission("roles:manage");
+
+    if (!canAccessDashboard) {
       router.push("/");
       return;
     }
@@ -56,7 +64,7 @@ export default function AdminDashboard() {
     }
 
     fetchSubmissions();
-  }, [user, role, authLoading, filterStatus, router]);
+  }, [user, hasPermission, authLoading, filterStatus, router]);
 
   async function handleReview(action: "approve" | "reject") {
     if (!selectedSubmission || !user) return;
@@ -92,7 +100,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!user || role !== "admin") {
+  if (!user || (!hasPermission("submissions:review") && !hasPermission("users:view") && !hasPermission("roles:manage"))) {
     return null;
   }
 
@@ -119,24 +127,38 @@ export default function AdminDashboard() {
         {/* Top-level navigation tabs */}
         <Tabs.Root value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
           <Tabs.List size="2" mb="5">
-            <Tabs.Trigger value="submissions">
-              <Flex align="center" gap="2">
-                <Plus className="w-4 h-4" />
-                Submissions
-              </Flex>
-            </Tabs.Trigger>
-            <Tabs.Trigger value="users">
-              <Flex align="center" gap="2">
-                <Users className="w-4 h-4" />
-                Users
-              </Flex>
-            </Tabs.Trigger>
-            <Tabs.Trigger value="role-requests">
-              <Flex align="center" gap="2">
-                <UserCheck className="w-4 h-4" />
-                Role Requests
-              </Flex>
-            </Tabs.Trigger>
+            {hasPermission("submissions:review") && (
+              <Tabs.Trigger value="submissions">
+                <Flex align="center" gap="2">
+                  <Plus className="w-4 h-4" />
+                  Submissions
+                </Flex>
+              </Tabs.Trigger>
+            )}
+            {hasPermission("users:view") && (
+              <Tabs.Trigger value="users">
+                <Flex align="center" gap="2">
+                  <Users className="w-4 h-4" />
+                  Users
+                </Flex>
+              </Tabs.Trigger>
+            )}
+            {hasPermission("roles:manage") && (
+              <>
+                <Tabs.Trigger value="role-requests">
+                  <Flex align="center" gap="2">
+                    <UserCheck className="w-4 h-4" />
+                    Role Requests
+                  </Flex>
+                </Tabs.Trigger>
+                <Tabs.Trigger value="permissions">
+                  <Flex align="center" gap="2">
+                    <Shield className="w-4 h-4" />
+                    Permissions
+                  </Flex>
+                </Tabs.Trigger>
+              </>
+            )}
           </Tabs.List>
 
           {/* Submissions Tab */}
@@ -245,6 +267,11 @@ export default function AdminDashboard() {
           {/* Role Requests Tab */}
           <Tabs.Content value="role-requests">
             <RoleRequestsPanel />
+          </Tabs.Content>
+
+          {/* Role Permissions Tab */}
+          <Tabs.Content value="permissions">
+            <RolesPermissionsPanel />
           </Tabs.Content>
         </Tabs.Root>
       </Container>

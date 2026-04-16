@@ -12,17 +12,15 @@ import {
   notFoundResponse,
 } from "@/lib/response";
 import { parsePaginationParams } from "@/lib/pagination";
-import { requireAdmin } from "@/lib/auth-server";
+import { requirePermission } from "@/lib/auth-server";
 import { UserRole } from "@/lib/user-roles";
 import { setUserRole } from "@/lib/admin-roles";
 
-// Schema for updating user role
 const updateUserRoleSchema = z.object({
   uid: z.string().min(1, "User ID is required"),
   role: z.enum(["admin", "editor", "viewer"]),
 });
 
-// Schema for creating a user (optional, for future expansion)
 const createUserSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
@@ -36,9 +34,8 @@ const createUserSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin authentication
     const authHeader = request.headers.get("authorization");
-    const authResult = await requireAdmin(authHeader);
+    const authResult = await requirePermission(authHeader, "users:view");
 
     if ("error" in authResult) {
       return authResult.status === 401
@@ -49,11 +46,9 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const { limit, cursor } = parsePaginationParams(request);
 
-    // Get filter parameters
     const roleFilter = searchParams.get("role") as UserRole | null;
     const searchQuery = searchParams.get("search")?.toLowerCase() || null;
 
-    // Check cache (only if no search query for better cache hits)
     if (!searchQuery) {
       const cacheKey = generateCacheKey(
         "/api/v1/users",
@@ -67,15 +62,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch users from Firestore users collection
     let query: FirebaseFirestore.Query = adminDb.collection("users");
 
-    // Apply role filter if specified
     if (roleFilter) {
       query = query.where("role", "==", roleFilter);
     }
 
-    // Apply pagination
     if (cursor) {
       const cursorDoc = await adminDb.collection("users").doc(cursor).get();
       if (cursorDoc.exists) {
@@ -101,7 +93,6 @@ export async function GET(request: NextRequest) {
       ...doc.data(),
     }));
 
-    // Apply search filter client-side (for email, displayName)
     if (searchQuery) {
       users = users.filter((user: any) => {
         const email = (user.email || "").toLowerCase();
@@ -163,9 +154,9 @@ export async function GET(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    // Verify admin authentication
+    // Verify permission
     const authHeader = request.headers.get("authorization");
-    const authResult = await requireAdmin(authHeader);
+    const authResult = await requirePermission(authHeader, "users:manage");
 
     if ("error" in authResult) {
       return authResult.status === 401
@@ -225,9 +216,9 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    // Verify admin authentication
+    // Verify permission
     const authHeader = request.headers.get("authorization");
-    const authResult = await requireAdmin(authHeader);
+    const authResult = await requirePermission(authHeader, "users:manage");
 
     if ("error" in authResult) {
       return authResult.status === 401

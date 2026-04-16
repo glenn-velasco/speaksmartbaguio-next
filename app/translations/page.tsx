@@ -18,12 +18,11 @@ interface TranslationItem {
 }
 
 export default function TranslationsPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [items, setItems] = useState<TranslationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const cursorMap = useRef<Record<number, string | undefined>>({ 1: undefined });
@@ -75,7 +74,7 @@ export default function TranslationsPage() {
             <Heading size="7" mb="1" highContrast>Translations</Heading>
             <Text color="gray" size="3">Direct word translations between languages</Text>
           </Box>
-          {user && (
+          {hasPermission("translations:create") && (
             <Button asChild size="2">
               <Link href={`/translations/new${searchTerm ? `?translation=${encodeURIComponent(searchTerm)}` : ''}`}>
                 Add Translation

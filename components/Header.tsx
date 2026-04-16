@@ -9,7 +9,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Edit } from "lucide-react";
 
 export function Header() {
-  const { user, logout, role } = useAuth();
+  const { user, logout, role, hasPermission } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -72,7 +72,7 @@ export function Header() {
                 </DropdownMenu.Trigger>
 
                 <DropdownMenu.Content align="end" sideOffset={5}>
-                  {role === 'admin' && (
+                  {(hasPermission("submissions:review") || hasPermission("users:view") || hasPermission("roles:manage")) && (
                     <DropdownMenu.Item onSelect={() => router.push('/dashboard')}>
                       Dashboard
                     </DropdownMenu.Item>

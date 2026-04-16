@@ -22,7 +22,7 @@ interface DictionaryItem {
 }
 
 export default function DictionaryPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [items, setItems] = useState<DictionaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -84,9 +84,9 @@ export default function DictionaryPage() {
             <Heading size="7" mb="1" highContrast>Dictionary</Heading>
             <Text color="gray" size="3">Browse and search Ilokano words and translations</Text>
           </Box>
-          {user && (
+          {hasPermission("dictionary:create") && (
             <Button asChild size="2">
-              <Link href={`/dictionary/new${searchTerm ? `?word=${encodeURIComponent(searchTerm)}` : ''}`}>
+              <Link href={`/dictionary/new${searchTerm ? `?word=${encodeURIComponent(searchTerm)}` : ""}`}>
                 Add Word
               </Link>
             </Button>
