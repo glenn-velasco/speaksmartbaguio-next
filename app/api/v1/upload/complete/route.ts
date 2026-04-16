@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireEditorOrAdmin } from "@/lib/auth-server";
 import { badRequestResponse, successResponse, errorResponse, notFoundResponse } from "@/lib/response";
-import { getAccessUrl, isStorageConfigured } from "@/lib/storage";
+import { isStorageConfigured, getActiveStorageBackend } from "@/lib/storage";
 import { adminDb } from "@/lib/firebase-admin";
 import { cache } from "@/lib/cache";
 import { cleanupOldAudioFile } from "@/lib/audio-cleanup";
@@ -54,14 +54,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get the public access URL if not already provided
-    let finalUrl = accessUrl;
-    if (!finalUrl || finalUrl.startsWith("firebase://") || finalUrl.startsWith("/")) {
-      finalUrl = await getAccessUrl(key);
+    const backend = getActiveStorageBackend();
+
+    let ttsUrlToStore: string;
+
+    if (backend === "s3") {
+      ttsUrlToStore = key;
+    } else if (backend === "firebase") {
+      let finalUrl = accessUrl;
+      if (!finalUrl || finalUrl.startsWith("firebase://") || finalUrl.startsWith("/")) {
+        const { transformStorageKeyToUrl } = await import("@/lib/storage");
+        finalUrl = await transformStorageKeyToUrl(key);
+      }
+      ttsUrlToStore = finalUrl;
+    } else {
+      ttsUrlToStore = key;
     }
 
     await docRef.update({
-      tts_url: finalUrl,
+      tts_url: ttsUrlToStore,
       updated_at: new Date().toISOString(),
     });
 
@@ -72,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     return successResponse({
       success: true,
-      audioUrl: finalUrl,
+      audioUrl: ttsUrlToStore,
       message: oldTtsUrl ? "Upload completed and old file deleted" : "Upload completed successfully",
       oldFileDeleted: !!oldTtsUrl,
     });

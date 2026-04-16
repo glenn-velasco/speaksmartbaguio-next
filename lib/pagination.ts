@@ -21,14 +21,19 @@ export function parsePaginationParams(request: NextRequest): PaginationParams {
   return { limit: Math.max(limit, 1), cursor };
 }
 
-export function buildPaginationResult<T>(
+interface ItemWithId {
+  id?: string;
+  [key: string]: unknown;
+}
+
+export function buildPaginationResult<T extends ItemWithId>(
   items: T[],
   requestedLimit: number,
 ): { items: T[] } & PaginationResult {
   const hasMore = items.length > requestedLimit;
   const resultItems = hasMore ? items.slice(0, requestedLimit) : items;
   const nextCursor: string | undefined = hasMore && resultItems.length > 0
-    ? (resultItems[resultItems.length - 1] as any).id || undefined
+    ? resultItems[resultItems.length - 1].id || undefined
     : undefined;
 
   return {
@@ -41,7 +46,7 @@ export function buildPaginationResult<T>(
 export async function applyCursor<T>(
   query: FirebaseFirestore.CollectionReference | FirebaseFirestore.Query,
   cursor: string,
-  collectionName: string,
+  _collectionName: string,
 ): Promise<FirebaseFirestore.Query> {
   const doc = await (query as FirebaseFirestore.CollectionReference).doc(cursor).get();
 

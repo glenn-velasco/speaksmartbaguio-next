@@ -16,16 +16,20 @@ import { requirePermission } from "@/lib/auth-server";
 import { UserRole } from "@/lib/user-roles";
 import { setUserRole } from "@/lib/admin-roles";
 
+interface UserData {
+  uid: string;
+  email?: string;
+  displayName?: string;
+  role: string;
+  emailVerified?: boolean;
+  photoURL?: string | null;
+  createdAt?: string;
+  lastSignIn?: string;
+}
+
 const updateUserRoleSchema = z.object({
   uid: z.string().min(1, "User ID is required"),
   role: z.enum(["admin", "editor", "viewer"]),
-});
-
-const createUserSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  displayName: z.string().optional(),
-  role: z.enum(["admin", "editor", "viewer"]).optional().default("viewer"),
 });
 
 /**
@@ -91,10 +95,10 @@ export async function GET(request: NextRequest) {
     let users = resultDocs.map((doc) => ({
       uid: doc.id,
       ...doc.data(),
-    }));
+    })) as UserData[];
 
     if (searchQuery) {
-      users = users.filter((user: any) => {
+      users = users.filter((user: UserData) => {
         const email = (user.email || "").toLowerCase();
         const displayName = (user.displayName || "").toLowerCase();
         return email.includes(searchQuery) || displayName.includes(searchQuery);
@@ -102,7 +106,7 @@ export async function GET(request: NextRequest) {
     }
 
     const enrichedUsers = await Promise.all(
-      users.map(async (user: any) => {
+      users.map(async (user: UserData) => {
         try {
           const authUser = await adminAuth.getUser(user.uid);
           return {
@@ -172,7 +176,7 @@ export async function PUT(request: NextRequest) {
 
     try {
       await adminAuth.getUser(uid);
-    } catch (error) {
+    } catch {
       return notFoundResponse("User");
     }
 
@@ -183,8 +187,8 @@ export async function PUT(request: NextRequest) {
         { role, updatedAt: new Date().toISOString() },
         { merge: true }
       );
-    } catch (error) {
-      logger.warn("Failed to update Firestore profile", { uid, error: (error as Error).message });
+    } catch {
+      logger.warn("Failed to update Firestore profile", { uid });
     }
 
     logger.info("User role updated", {
@@ -232,7 +236,7 @@ export async function DELETE(request: NextRequest) {
 
     try {
       await adminAuth.getUser(uid);
-    } catch (error) {
+    } catch {
       return notFoundResponse("User");
     }
 
@@ -240,8 +244,8 @@ export async function DELETE(request: NextRequest) {
 
     try {
       await adminDb.collection("users").doc(uid).delete();
-    } catch (error) {
-      logger.warn("Failed to delete Firestore profile", { uid, error: (error as Error).message });
+    } catch {
+      logger.warn("Failed to delete Firestore profile", { uid });
     }
 
     logger.info("User deleted", {

@@ -112,7 +112,7 @@ export function validateAudioFileServer(
  */
 export async function getAudioDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     const reader = new FileReader();
 
     reader.onload = async (e) => {
@@ -121,7 +121,7 @@ export async function getAudioDuration(file: File): Promise<number> {
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         resolve(audioBuffer.duration);
         audioContext.close();
-      } catch (error) {
+      } catch {
         reject(new Error("Failed to decode audio file"));
       }
     };

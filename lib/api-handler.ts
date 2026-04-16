@@ -13,11 +13,11 @@ import {
   forbiddenResponse,
 } from "@/lib/response";
 import { parsePaginationParams } from "@/lib/pagination";
-import { requirePermission, verifyToken } from "@/lib/auth-server";
+import { requirePermission } from "@/lib/auth-server";
 import { Permission } from "@/lib/permissions";
-import { UserRole } from "@/lib/user-roles";
 import { cleanupOldAudioFile } from "@/lib/audio-cleanup";
 import { generateSearchFields } from "@/lib/search-utils";
+import { transformStorageKeyToUrl } from "@/lib/storage";
 
 export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema extends z.ZodType> {
   collection: string;
@@ -60,6 +60,26 @@ function safeParseSchema<T extends z.ZodType>(schema: T, data: unknown): SafePar
   }
 
   return { success: true, data: result.data };
+}
+
+async function transformDocumentTtsUrl(doc: { id: string; [key: string]: unknown }): Promise<{ id: string; [key: string]: unknown }> {
+  const ttsUrl = doc.tts_url;
+  
+  if (ttsUrl && typeof ttsUrl === "string") {
+    try {
+      const transformedUrl = await transformStorageKeyToUrl(ttsUrl);
+      return { ...doc, tts_url: transformedUrl };
+    } catch (error) {
+      logger.warn("Failed to transform tts_url", { id: doc.id, error: (error as Error).message });
+      return doc;
+    }
+  }
+  
+  return doc;
+}
+
+async function transformDocumentsTtsUrl(docs: Array<{ id: string; [key: string]: unknown }>): Promise<Array<{ id: string; [key: string]: unknown }>> {
+  return Promise.all(docs.map(transformDocumentTtsUrl));
 }
 
 async function parseRequestBody(request: NextRequest): Promise<unknown> {
@@ -143,12 +163,14 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       const cached = cache.get(cacheKey);
 
       if (cached) {
-
         logger.debug("Cache hit", { collection, cacheKey });
-
-        return NextResponse.json(cached, { status: 200 });
+        
+        const transformedCached = await transformDocumentsTtsUrl((cached as { data: Array<{ id: string; [key: string]: unknown }> }).data);
+        return NextResponse.json({ ...cached, data: transformedCached }, { status: 200 });
       }
-      let { query, searchField } = buildFilterQuery(collection, filterableFields, searchParams, searchableFields);
+      const queryObj = buildFilterQuery(collection, filterableFields, searchParams, searchableFields);
+      let query = queryObj.query;
+      const searchField = queryObj.searchField;
 
       if (searchField) {
         query = query.orderBy(searchField);
@@ -179,16 +201,18 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         ...doc.data(),
       }));
 
+      const transformedData = await transformDocumentsTtsUrl(data);
+
       const result = {
-        data,
-        total: data.length,
+        data: transformedData,
+        total: transformedData.length,
         hasMore,
         ...(nextCursor ? { nextCursor } : {}),
       };
 
       cache.set(cacheKey, result, cacheTTL);
 
-      return successResponse(data, 200, { total: data.length, hasMore, ...(nextCursor ? { nextCursor } : {}) });
+      return successResponse(transformedData, 200, { total: transformedData.length, hasMore, ...(nextCursor ? { nextCursor } : {}) });
     } catch (error) {
       logger.error("GET request failed", { collection, error: (error as Error).message });
       return serverErrorResponse("Failed to fetch records");

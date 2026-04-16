@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 export type UserRole = "admin" | "editor" | "viewer";
 
 export interface UserProfile {
@@ -8,8 +8,13 @@ export interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
   role: UserRole;
-  createdAt: any;
-  updatedAt: any;
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+interface DecodedToken {
+  role?: UserRole;
+  [key: string]: unknown;
 }
 
 // Note: To set user roles via Custom Claims, use `setUserRole` from `@/lib/admin-roles` using server-side code.
@@ -21,7 +26,7 @@ export interface UserProfile {
  * @param decodedToken - Verified Firebase ID token
  * @returns User role (defaults to "viewer" if not set)
  */
-export function getRoleFromToken(decodedToken: any): UserRole {
+export function getRoleFromToken(decodedToken: DecodedToken): UserRole {
   return decodedToken.role || "viewer";
 }
 

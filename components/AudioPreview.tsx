@@ -33,7 +33,7 @@ export function AudioPreview({
     try {
       const response = await fetch(url);
       const arrayBuffer = await response.arrayBuffer();
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       
       const rawData = audioBuffer.getChannelData(0);
@@ -62,7 +62,8 @@ export function AudioPreview({
 
   useEffect(() => {
     if (audioUrl && showWaveform) {
-      generateWaveformData(audioUrl);
+      const timer = setTimeout(() => generateWaveformData(audioUrl), 0);
+      return () => clearTimeout(timer);
     }
   }, [audioUrl, showWaveform, generateWaveformData]);
 

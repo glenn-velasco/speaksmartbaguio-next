@@ -151,41 +151,55 @@ export async function uploadToStorage(
 }
 
 /**
- * Get the public access URL for a stored file
+ * Transform a storage key to a fresh access URL
+ * Used for S3 keys that need fresh presigned URLs on each request
+ * This solves the issue where presigned URLs expire
  * 
- * @param key - Storage key or URL
- * @param backend - Storage backend
- * @param expiresIn - Presigned URL expiry (for S3)
+ * @param key - Storage key (e.g., "audio/dictionary/123/file.mp3")
+ * @param expiresIn - Presigned URL expiry in seconds (default 3600)
  */
-export async function getAccessUrl(
+export async function transformStorageKeyToUrl(
   key: string,
-  backend?: StorageBackend,
   expiresIn: number = 3600
 ): Promise<string> {
-  // If it's already a full URL (Firebase download URL), return as-is
+
   if (key.startsWith("http://") || key.startsWith("https://")) {
     return key;
   }
 
-  // If it's a firebase:// marker, we need to generate the URL
   if (key.startsWith("firebase://")) {
     const actualKey = key.replace("firebase://", "");
     const { getFirebaseStorageDownloadUrl } = await import("@/lib/firebase-storage");
     return getFirebaseStorageDownloadUrl(actualKey);
   }
 
-  // For S3, check if CDN is configured
-  if (backend === "s3" || !backend) {
-    const cdnUrl = getS3CDNUrl();
-    if (cdnUrl) {
-      return `${cdnUrl}/${key}`;
-    }
-
-    // Generate presigned URL
-    return generateAccessPresignedUrl(key, expiresIn);
+  const cdnUrl = getS3CDNUrl();
+  if (cdnUrl) {
+    return `${cdnUrl}/${key}`;
   }
 
-  throw new Error(`Cannot generate access URL for key: ${key}`);
+  return generateAccessPresignedUrl(key, expiresIn);
+}
+
+/**
+ * Check if a tts_url needs transformation to a fresh URL
+ * Returns true if it's a storage key (not a full URL)
+ * 
+ * @param ttsUrl - The tts_url value from database
+ */
+export function needsUrlTransformation(ttsUrl: string | undefined): boolean {
+  if (!ttsUrl) return false;
+  
+  if (ttsUrl.startsWith("http://") || ttsUrl.startsWith("https://")) {
+    if (ttsUrl.includes("firebasestorage.googleapis.com") || 
+        ttsUrl.includes("firebase.googleapis.com")) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return true;
 }
 
 /**
@@ -199,7 +213,6 @@ export async function deleteFromStorage(
   backend?: StorageBackend
 ): Promise<StorageDeleteResult> {
   try {
-    // Determine backend
     const actualBackend = backend || getActiveStorageBackend();
 
     if (actualBackend === "s3") {
@@ -208,13 +221,10 @@ export async function deleteFromStorage(
     }
 
     if (actualBackend === "firebase") {
-      // Extract key from Firebase URL if needed
       let storageKey = key;
       if (key.startsWith("http")) {
-        // Extract path from Firebase download URL
         const url = new URL(key);
-        storageKey = url.pathname.substring(1); // Remove leading /
-        // Decode URL-encoded characters
+        storageKey = url.pathname.substring(1); 
         storageKey = decodeURIComponent(storageKey);
       } else if (key.startsWith("firebase://")) {
         storageKey = key.replace("firebase://", "");

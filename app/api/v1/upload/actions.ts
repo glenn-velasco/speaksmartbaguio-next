@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import {
   generatePresignedUploadUrl,
-  getAccessUrl,
+  transformStorageKeyToUrl,
   uploadToStorage,
   isStorageConfigured,
+  getActiveStorageBackend,
 } from "@/lib/storage";
 import { validateAudioFileServer } from "@/lib/audio-validation";
 import { adminDb } from "@/lib/firebase-admin";
@@ -87,10 +88,19 @@ export async function completeUploadAction(
       };
     }
 
-    // Get the public access URL if not already provided
-    let finalUrl = accessUrl;
-    if (accessUrl.startsWith("firebase://") || accessUrl.startsWith("/")) {
-      finalUrl = await getAccessUrl(key);
+    const backend = getActiveStorageBackend();
+    let ttsUrlToStore: string;
+
+    if (backend === "s3") {
+      ttsUrlToStore = key;
+    } else if (backend === "firebase") {
+      let finalUrl = accessUrl;
+      if (accessUrl.startsWith("firebase://") || accessUrl.startsWith("/")) {
+        finalUrl = await transformStorageKeyToUrl(key);
+      }
+      ttsUrlToStore = finalUrl;
+    } else {
+      ttsUrlToStore = key;
     }
 
     const docRef = adminDb.collection(collection).doc(itemId);
@@ -105,7 +115,7 @@ export async function completeUploadAction(
     }
 
     await docRef.update({
-      tts_url: finalUrl,
+      tts_url: ttsUrlToStore,
       updated_at: new Date().toISOString(),
     });
 
@@ -116,7 +126,7 @@ export async function completeUploadAction(
 
     return {
       success: true,
-      audioUrl: finalUrl,
+      audioUrl: ttsUrlToStore,
     };
   } catch (error) {
     console.error("Failed to complete upload:", error);

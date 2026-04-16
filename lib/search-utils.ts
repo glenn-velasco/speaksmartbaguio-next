@@ -2,7 +2,7 @@
  * Utility for generating normalized search fields for Firestore.
  */
 
-export function generateSearchFields(data: any, searchableFields: string[]) {
+export function generateSearchFields(data: Record<string, unknown>, searchableFields: string[]) {
   const searchFields: Record<string, string> = {};
   
   for (const field of searchableFields) {

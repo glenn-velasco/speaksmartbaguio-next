@@ -102,8 +102,9 @@ export async function verifyToken(
       role,
       token,
     };
-  } catch (error: any) {
-    console.error("Token verification failed:", error.message);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Token verification failed:", err.message);
     return { error: "Invalid or expired token", status: 401 };
   }
 }
@@ -218,6 +219,6 @@ export async function requireEditorOrAdmin(
 /**
  * Extract role from decoded token (for use in middleware/handlers).
  */
-export function getRoleFromTokenClaims(claims: any): UserRole {
-  return claims.role || "viewer";
+export function getRoleFromTokenClaims(claims: Record<string, unknown>): UserRole {
+  return (claims.role as UserRole) || "viewer";
 }

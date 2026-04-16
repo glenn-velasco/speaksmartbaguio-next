@@ -77,12 +77,11 @@ class MemoryCache {
     const keys = this.getKeys(pattern);
 
     for (const key of keys) {
-      const cached = this.get<{ data: unknown[] }>(key);
+      const cached = this.get<{ data: T[] }>(key);
       if (cached && Array.isArray(cached.data)) {
-        const itemIndex = cached.data.findIndex((item: any) => item.id === itemId);
+        const itemIndex = cached.data.findIndex((item) => item.id === itemId);
         if (itemIndex !== -1) {
           cached.data[itemIndex] = updatedItem;
-          // Refresh the cache entry
           this.set(key, cached, DEFAULT_CACHE_TTL);
         }
       }
@@ -92,15 +91,14 @@ class MemoryCache {
   /**
    * Remove item from all collection caches
    */
-  removeItemFromCollection(collection: string, itemId: string): void {
+  removeItemFromCollection<T extends { id: string }>(collection: string, itemId: string): void {
     const pattern = `/api/v1/${collection}`;
     const keys = this.getKeys(pattern);
 
     for (const key of keys) {
-      const cached = this.get<{ data: unknown[] }>(key);
+      const cached = this.get<{ data: T[] }>(key);
       if (cached && Array.isArray(cached.data)) {
-        cached.data = cached.data.filter((item: any) => item.id !== itemId);
-        // Refresh the cache entry
+        cached.data = cached.data.filter((item) => item.id !== itemId);
         this.set(key, cached, DEFAULT_CACHE_TTL);
       }
     }
