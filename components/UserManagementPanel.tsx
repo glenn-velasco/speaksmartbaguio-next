@@ -187,7 +187,7 @@ export function UserManagementPanel({ initialUsers = [] }: UserManagementPanelPr
 
         <Flex mt="3" gap="2">
           <Text size="2" color="gray">
-            Showing {filteredUsers.length} of {users.length} users
+            Showing {filteredUsers.length} of {users.length - 1} users
           </Text>
         </Flex>
       </Card>
