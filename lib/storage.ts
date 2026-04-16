@@ -87,14 +87,14 @@ export async function generatePresignedUploadUrl(
   itemId: string,
   filename: string,
   contentType: string,
-  expiresIn: number = parseInt(process.env.AUDIO_UPLOAD_EXPIRY_SECONDS || "3600")
+  expiresIn: number = parseInt(process.env.AUDIO_UPLOAD_EXPIRY_SECONDS || "604800")
 ): Promise<PresignedUploadUrlResult> {
   const backend = getActiveStorageBackend();
 
   if (backend === "s3") {
     const key = generateS3Key(collection, itemId, filename);
     const uploadUrl = await generateUploadPresignedUrl(key, contentType, expiresIn);
-    
+
     // Generate access URL (with CDN if configured)
     const cdnUrl = getS3CDNUrl();
     const accessUrl = cdnUrl ? `${cdnUrl}/${key}` : await generateAccessPresignedUrl(key, expiresIn);
@@ -110,7 +110,7 @@ export async function generatePresignedUploadUrl(
   // For Firebase, we return a special marker URL format
   // The client will need to upload via a different mechanism
   const key = generateFirebaseAudioKey(collection, itemId, filename);
-  
+
   // For Firebase Storage, we'll use a server-side upload approach
   // Return a placeholder that indicates server upload is needed
   return {
@@ -180,7 +180,7 @@ export async function getAccessUrl(
     if (cdnUrl) {
       return `${cdnUrl}/${key}`;
     }
-    
+
     // Generate presigned URL
     return generateAccessPresignedUrl(key, expiresIn);
   }
@@ -244,7 +244,7 @@ export function generateAudioKey(
   filename: string
 ): string {
   const backend = getActiveStorageBackend();
-  
+
   if (backend === "s3") {
     return generateS3Key(collection, itemId, filename);
   }
