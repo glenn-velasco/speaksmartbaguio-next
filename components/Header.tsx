@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { usePathname, useRouter } from "next/navigation";
-import { DropdownMenu, Button, Avatar, Flex, Text, Box } from "@radix-ui/themes";
+import { useState } from "react";
+import { DropdownMenu, Button, Avatar, Flex, Text, Box, Badge } from "@radix-ui/themes";
 import { createSubmission } from "@/lib/actions";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Edit } from "lucide-react";
+import { Edit, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 
 export function Header() {
   const { user, logout, role, hasPermission } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
     { href: "/dictionary", label: "Dictionary" },
@@ -55,26 +57,53 @@ export function Header() {
           </Flex>
 
           <Flex align="center" gap="3">
+            <button
+              className="md:hidden"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: "4px" }}
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
             <ThemeToggle />
             {user ? (
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                   <Button variant="ghost" color="gray" size="2" style={{ cursor: "pointer" }}>
-                    <Flex align="center" gap="2">
-                      {user.photoURL ? (
-                        <Avatar src={user.photoURL} fallback={((user.email || user.displayName || "?")[0]).toUpperCase()} size="1" radius="full" />
-                      ) : (
-                        <Avatar fallback={((user.email || user.displayName || "?")[0]).toUpperCase()} size="1" color="indigo" radius="full" />
-                      )}
-                      <Text size="2" className="hidden md:inline">{user.email || user.displayName}</Text>
-                    </Flex>
+                    {user.photoURL ? (
+                      <Avatar src={user.photoURL} fallback={((user.email || user.displayName || "?")[0]).toUpperCase()} size="1" radius="full" />
+                    ) : (
+                      <Avatar fallback={((user.email || user.displayName || "?")[0]).toUpperCase()} size="1" color="indigo" radius="full" />
+                    )}
                   </Button>
                 </DropdownMenu.Trigger>
 
-                <DropdownMenu.Content align="end" sideOffset={5}>
+                <DropdownMenu.Content align="end" sideOffset={8} size="2">
+                  <Box px="3" py="3">
+                    <Flex align="center" gap="3">
+                      {user.photoURL ? (
+                        <Avatar src={user.photoURL} fallback={((user.email || user.displayName || "?")[0]).toUpperCase()} size="3" radius="full" style={{ border: "2px solid var(--indigo-6)" }} />
+                      ) : (
+                        <Avatar fallback={((user.email || user.displayName || "?")[0]).toUpperCase()} size="3" color="indigo" radius="full" />
+                      )}
+                      <Flex direction="column" gap="0">
+                        <Text size="2" weight="bold">{user.displayName || user.email?.split('@')[0] || 'User'}</Text>
+                        <Text size="1" color="gray">{user.email}</Text>
+                      </Flex>
+                    </Flex>
+                    <Flex mt="2" gap="2">
+                      <Badge color={role === 'editor' ? 'indigo' : 'gray'} size="1">{role || 'viewer'}</Badge>
+                    </Flex>
+                  </Box>
+
                   {(hasPermission("submissions:review") || hasPermission("users:view") || hasPermission("roles:manage")) && (
-                    <DropdownMenu.Item onSelect={() => router.push('/dashboard')}>
-                      Dashboard
+                    <DropdownMenu.Item
+                      onSelect={() => router.push('/dashboard')}
+                      style={{ fontWeight: pathname === '/dashboard' ? '600' : '400' }}
+                    >
+                      <Flex align="center" gap="2">
+                        <LayoutDashboard className="w-4 h-4" />
+                        Dashboard
+                      </Flex>
                     </DropdownMenu.Item>
                   )}
 
@@ -112,7 +141,7 @@ export function Header() {
                               alert("✗ " + (result.error || "Failed to submit role request"));
                             }
                           } catch (err: any) {
-                            alert("✗ An error occurred while submitting the request:\n" + 
+                            alert("✗ An error occurred while submitting the request:\n" +
                               (err?.message || "Unknown error"));
                           }
                         }}
@@ -122,18 +151,19 @@ export function Header() {
                           Request Editor Access
                         </Flex>
                       </DropdownMenu.Item>
-                      <DropdownMenu.Separator />
                     </>
                   )}
 
-                  <DropdownMenu.Separator />
                   <DropdownMenu.Item
                     color="red"
                     onSelect={async () => {
                       await logout();
                     }}
                   >
-                    Logout
+                    <Flex align="center" gap="2">
+                      <LogOut className="w-4 h-4" />
+                      Logout
+                    </Flex>
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
@@ -144,6 +174,36 @@ export function Header() {
             )}
           </Flex>
         </Flex>
+
+        {mobileMenuOpen && (
+          <nav className="md:hidden" style={{ padding: "16px", borderTop: "1px solid var(--gray-a5)" }}>
+            {navLinks.map((link) => {
+              const isActive = link.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  style={{
+                    textDecoration: "none",
+                    display: "block",
+                    padding: "8px 0"
+                  }}
+                >
+                  <Text
+                    size="3"
+                    weight={isActive ? "bold" : "medium"}
+                    color={isActive ? "indigo" : "gray"}
+                  >
+                    {link.label}
+                  </Text>
+                </Link>
+              );
+            })}
+          </nav>
+        )}
       </div>
     </header>
   );
