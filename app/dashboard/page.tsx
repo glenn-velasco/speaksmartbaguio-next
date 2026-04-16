@@ -79,10 +79,13 @@ export default function AdminDashboard() {
       setAdminNote("");
       
       if (action === "approve" && result.itemId) {
+
         const collection = result.collection || selectedSubmission.collection;
+
         const itemId = result.itemId;
-        console.log("[Dashboard] Redirecting to:", `/${collection}/${itemId}`, { result });
+
         router.push(`/${collection}/${itemId}`);
+        
         return;
       }
 

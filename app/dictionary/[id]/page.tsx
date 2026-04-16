@@ -21,10 +21,11 @@ export default function DictionaryDetailPage() {
   useEffect(() => {
     async function fetchItem() {
       try {
-        console.log("[DictionaryDetail] Fetching item:", id);
+
         const found = await getItemById("dictionary", id);
-        console.log("[DictionaryDetail] Found item:", found);
+
         setItem(found || null);
+        
       } catch (error) {
         console.error("Failed to fetch item:", error);
       } finally {

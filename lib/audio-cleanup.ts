@@ -69,17 +69,16 @@ export async function cleanupOldAudioFile(
   oldTtsUrl: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    // Don't delete if URL is empty or not from our storage
+
     if (!oldTtsUrl) {
       return { success: true, message: "No old URL to delete" };
     }
 
     if (!isOurStorageUrl(oldTtsUrl)) {
-      console.log(`Skipping deletion of external URL: ${oldTtsUrl}`);
+
       return { success: true, message: "External URL, skipping deletion" };
     }
 
-    // Extract key from URL
     const key = extractKeyFromUrl(oldTtsUrl);
     
     if (!key) {
@@ -87,14 +86,11 @@ export async function cleanupOldAudioFile(
       return { success: false, message: "Could not extract storage key" };
     }
 
-    // Delete the file from storage
     const result = await deleteFromStorage(key);
 
     if (result.success) {
-      console.log(`Deleted old audio file: ${key}`);
       return { success: true, message: `Deleted old audio file: ${key}` };
     } else {
-      console.warn(`Failed to delete old audio file: ${key}`);
       return { success: false, message: `Failed to delete old file` };
     }
   } catch (error) {

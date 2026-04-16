@@ -163,13 +163,17 @@ export async function createAndAutoApproveSubmission(submission: SubmissionData,
 
     const itemId = await applySubmission(submissionData);
 
-    console.log("[createAndAutoApproveSubmission] Applied, itemId:", itemId);
 
     revalidatePath("/dashboard");
+
     revalidatePath(`/${submission.collection}`);
+
     if (itemId) {
+
       revalidatePath(`/${submission.collection}/${itemId}`);
+
       revalidatePath(`/${submission.collection}/${itemId}/edit`);
+
     }
     return { success: true, id: docRef.id, itemId: itemId || undefined, message: "Changes saved successfully" };
   } catch (error: any) {
@@ -507,7 +511,6 @@ export async function getAllUsers(options?: {
       });
     }
 
-    console.log(`Loaded ${users.length} users from Authentication`);
     return users;
   } catch (error: any) {
     console.error("Failed to get users:", error);
