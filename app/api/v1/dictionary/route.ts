@@ -7,4 +7,5 @@ export const { GET, POST, PUT, DELETE } = createCRUDHandler({
   updateSchema: dictionaryDatabaseSchema,
   uniqueField: "ilokanoWord",
   filterableFields: ["partOfSpeech", "category", "englishTranslation", "ilokanoWord", "tagalogTranslation", "tts_url"],
+  searchableFields: ["ilokanoWord", "englishTranslation", "tagalogTranslation"],
 });

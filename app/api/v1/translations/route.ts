@@ -7,4 +7,5 @@ export const { GET, POST, PUT, DELETE } = createCRUDHandler({
   updateSchema: translationsDatabaseSchema,
   uniqueField: "ilokano",
   filterableFields: ["english", "ilokano", "tagalog"],
+  searchableFields: ["ilokano", "english", "tagalog"],
 });

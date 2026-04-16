@@ -6,9 +6,16 @@ import { requireAuth, requireAdmin, AuthenticatedUser, verifyToken } from "@/lib
 import { cache } from "@/lib/cache";
 import { setUserRole } from "@/lib/admin-roles";
 import { UserRole } from "@/lib/user-roles";
+import { generateSearchFields } from "./search-utils";
 
 export type SubmissionAction = "create" | "update" | "delete";
 export type CollectionType = "dictionary" | "phrasebook" | "translations" | "roles";
+
+const SEARCHABLE_FIELDS: Record<string, string[]> = {
+  dictionary: ["ilokanoWord", "englishTranslation", "tagalogTranslation"],
+  phrasebook: ["ilokanoWord", "englishTranslation", "tagalogTranslation"],
+  translations: ["ilokano", "english", "tagalog"],
+};
 export type SubmissionStatus = "pending" | "approved" | "rejected";
 
 export interface SubmissionData {
@@ -192,9 +199,15 @@ export async function directCrudAction(
       }
     }
 
+    const searchableFields = SEARCHABLE_FIELDS[collection] || [];
+    const updateData = { ...data };
+    if (searchableFields.length > 0 && action !== "delete") {
+      updateData._search = generateSearchFields(updateData, searchableFields);
+    }
+
     switch (action) {
       case "create": {
-        const docRef = await adminDb.collection(collection).add(data);
+        const docRef = await adminDb.collection(collection).add(updateData);
         revalidatePath(`/${collection}`);
         revalidatePath(`/${collection}/new`);
         return { success: true, id: docRef.id, message: `${collection} entry created successfully` };
@@ -203,7 +216,7 @@ export async function directCrudAction(
         if (!targetId) {
           return { success: false, error: "Target ID required for update", message: "Target ID required for update" };
         }
-        await adminDb.collection(collection).doc(targetId).update(data);
+        await adminDb.collection(collection).doc(targetId).update(updateData);
         revalidatePath(`/${collection}`);
         revalidatePath(`/${collection}/${targetId}`);
         revalidatePath(`/${collection}/${targetId}/edit`);
@@ -409,16 +422,21 @@ async function applySubmission(submission: any): Promise<string | null> {
   }
 
   let itemId: string | null = null;
+  const searchableFields = SEARCHABLE_FIELDS[collection as keyof typeof SEARCHABLE_FIELDS] || [];
+  const applyData = { ...data };
+  if (searchableFields.length > 0 && action !== "delete") {
+    applyData._search = generateSearchFields(applyData, searchableFields);
+  }
 
   switch (action) {
     case "create": {
-      const docRef = await adminDb.collection(collection).add(data);
+      const docRef = await adminDb.collection(collection).add(applyData);
       itemId = docRef.id;
       break;
     }
     case "update": {
       if (targetId) {
-        await adminDb.collection(collection).doc(targetId).update(data);
+        await adminDb.collection(collection).doc(targetId).update(applyData);
         itemId = targetId;
       }
       break;

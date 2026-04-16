@@ -101,7 +101,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Enrich with Firebase Auth data (emailVerified, photoURL, etc.)
     const enrichedUsers = await Promise.all(
       users.map(async (user: any) => {
         try {
@@ -114,7 +113,6 @@ export async function GET(request: NextRequest) {
             lastSignIn: authUser.metadata.lastSignInTime,
           };
         } catch (error) {
-          // If user not found in Auth, return Firestore data only
           logger.warn("User not found in Firebase Auth", { uid: user.uid });
           return user;
         }
@@ -128,7 +126,6 @@ export async function GET(request: NextRequest) {
       ...(nextCursor ? { nextCursor } : {}),
     };
 
-    // Cache the result (only if no search query)
     if (!searchQuery) {
       const cacheKey = generateCacheKey(
         "/api/v1/users",
@@ -173,17 +170,14 @@ export async function PUT(request: NextRequest) {
 
     const { uid, role } = validation.data;
 
-    // Verify user exists
     try {
       await adminAuth.getUser(uid);
     } catch (error) {
       return notFoundResponse("User");
     }
 
-    // Update custom claims
     await setUserRole(uid, role);
 
-    // Update Firestore profile (for display purposes)
     try {
       await adminDb.collection("users").doc(uid).set(
         { role, updatedAt: new Date().toISOString() },
@@ -216,7 +210,6 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    // Verify permission
     const authHeader = request.headers.get("authorization");
     const authResult = await requirePermission(authHeader, "users:manage");
 
@@ -233,22 +226,18 @@ export async function DELETE(request: NextRequest) {
       return badRequestResponse("User ID is required");
     }
 
-    // Prevent admin from deleting themselves
     if (uid === authResult.uid) {
       return forbiddenResponse("Cannot delete your own account");
     }
 
-    // Verify user exists
     try {
       await adminAuth.getUser(uid);
     } catch (error) {
       return notFoundResponse("User");
     }
 
-    // Delete from Firebase Auth
     await adminAuth.deleteUser(uid);
 
-    // Delete from Firestore
     try {
       await adminDb.collection("users").doc(uid).delete();
     } catch (error) {

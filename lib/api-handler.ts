@@ -17,6 +17,7 @@ import { requirePermission, verifyToken } from "@/lib/auth-server";
 import { Permission } from "@/lib/permissions";
 import { UserRole } from "@/lib/user-roles";
 import { cleanupOldAudioFile } from "@/lib/audio-cleanup";
+import { generateSearchFields } from "@/lib/search-utils";
 
 export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema extends z.ZodType> {
   collection: string;
@@ -25,6 +26,7 @@ export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema
   uniqueField?: string;
   cacheTTL?: number;
   filterableFields?: string[];
+  searchableFields?: string[];
   /**
    * Required permission for POST operations.
    * Default: <collection>:create
@@ -78,6 +80,7 @@ function buildFilterQuery(
   collection: string,
   filterableFields: string[],
   searchParams: URLSearchParams,
+  searchableFields: string[] = [],
 ): { query: FirebaseFirestore.Query; searchField?: string } {
   let query: FirebaseFirestore.Query = adminDb.collection(collection);
   let searchField: string | undefined;
@@ -89,8 +92,16 @@ function buildFilterQuery(
       if (value.includes("*")) {
         const prefix = value.replace(/\*/g, "");
         if (prefix && !hasRangeQuery) {
-          query = query.where(field, ">=", prefix);
-          searchField = field;
+          if (searchableFields.includes(field)) {
+            const lowerPrefix = prefix.toLowerCase();
+            query = query
+              .where(`_search.${field}`, ">=", lowerPrefix)
+              .where(`_search.${field}`, "<=", lowerPrefix + "\uf8ff");
+            searchField = `_search.${field}`;
+          } else {
+            query = query.where(field, ">=", prefix).where(field, "<=", prefix + "\uf8ff");
+            searchField = field;
+          }
           hasRangeQuery = true;
         }
       } else if (!hasRangeQuery) {
@@ -112,6 +123,7 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     uniqueField,
     cacheTTL = DEFAULT_CACHE_TTL,
     filterableFields = [],
+    searchableFields = [],
     createPermission,
     updatePermission,
     deletePermission,
@@ -136,7 +148,7 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
 
         return NextResponse.json(cached, { status: 200 });
       }
-      let { query, searchField } = buildFilterQuery(collection, filterableFields, searchParams);
+      let { query, searchField } = buildFilterQuery(collection, filterableFields, searchParams, searchableFields);
 
       if (searchField) {
         query = query.orderBy(searchField);
@@ -202,12 +214,12 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         return badRequestResponse(validation.error, validation.details);
       }
 
-      const validData = validation.data;
+      const validData = validation.data as Record<string, unknown>;
 
       if (uniqueField) {
         const existingDocs = await adminDb
           .collection(collection)
-          .where(uniqueField, "==", (validData as Record<string, unknown>)[uniqueField])
+          .where(uniqueField, "==", validData[uniqueField])
           .get();
 
         if (!existingDocs.empty) {
@@ -215,7 +227,12 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         }
       }
 
-      const newDocRef = await adminDb.collection(collection).add(validData as Record<string, unknown>);
+      // Add search fields
+      if (searchableFields.length > 0) {
+        validData._search = generateSearchFields(validData, searchableFields);
+      }
+
+      const newDocRef = await adminDb.collection(collection).add(validData);
 
       const newDoc = await newDocRef.get();
       const newItem = { id: newDocRef.id, ...newDoc.data() };
@@ -228,7 +245,7 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         userRole: authResult.role,
       });
 
-      return successResponse({ id: newDocRef.id, ...(validData as Record<string, unknown>) }, 201);
+      return successResponse({ id: newDocRef.id, ...validData }, 201);
     } catch (error) {
       if ((error as Error).message === "Content-Type must be application/json") {
         return badRequestResponse((error as Error).message);
@@ -285,6 +302,11 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         if (!cleanupResult.success) {
           logger.warn("Cleanup warning", { collection, id, message: cleanupResult.message });
         }
+      }
+
+      // Update search fields
+      if (searchableFields.length > 0) {
+        updateData._search = generateSearchFields(updateData, searchableFields);
       }
 
       await docRef.update(updateData);
