@@ -72,17 +72,28 @@ function buildFilterQuery(
   collection: string,
   filterableFields: string[],
   searchParams: URLSearchParams,
-): FirebaseFirestore.Query {
+): { query: FirebaseFirestore.Query; searchField?: string } {
   let query: FirebaseFirestore.Query = adminDb.collection(collection);
+  let searchField: string | undefined;
+  let hasRangeQuery = false;
 
   for (const field of filterableFields) {
     const value = searchParams.get(field);
     if (value) {
-      query = query.where(field, "==", value);
+      if (value.includes("*")) {
+        const prefix = value.replace(/\*/g, "");
+        if (prefix && !hasRangeQuery) {
+          query = query.where(field, ">=", prefix);
+          searchField = field;
+          hasRangeQuery = true;
+        }
+      } else if (!hasRangeQuery) {
+        query = query.where(field, "==", value);
+      }
     }
   }
 
-  return query;
+  return { query, searchField };
 }
 
 export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema extends z.ZodType>(
@@ -102,32 +113,31 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       const searchParams = request.nextUrl.searchParams;
       const { limit, cursor } = parsePaginationParams(request);
 
-      // Check cache
       const cacheKey = generateCacheKey(`/api/v1/${collection}`, Object.fromEntries(searchParams.entries()));
-      
+
       const cached = cache.get(cacheKey);
 
       if (cached) {
 
         logger.debug("Cache hit", { collection, cacheKey });
 
-        // cached already has { data, total, hasMore, nextCursor } shape
         return NextResponse.json(cached, { status: 200 });
       }
+      let { query, searchField } = buildFilterQuery(collection, filterableFields, searchParams);
 
-      let query = buildFilterQuery(collection, filterableFields, searchParams);
-
-      // Apply cursor-based pagination
-      if (cursor) {
-        const cursorDoc = await adminDb.collection(collection).doc(cursor).get();
-        if (cursorDoc.exists) {
-          query = query.orderBy("__name__").startAfter(cursorDoc);
-        }
+      if (searchField) {
+        query = query.orderBy(searchField);
       } else {
         query = query.orderBy("__name__");
       }
 
-      // Fetch one extra to determine hasMore
+      if (cursor) {
+        const cursorDoc = await adminDb.collection(collection).doc(cursor).get();
+        if (cursorDoc.exists) {
+          query = query.startAfter(cursorDoc);
+        }
+      }
+
       const snapshot = await query.limit(limit + 1).get();
 
       if (snapshot.empty) {
@@ -151,7 +161,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         ...(nextCursor ? { nextCursor } : {}),
       };
 
-      // Cache the result
       cache.set(cacheKey, result, cacheTTL);
 
       return successResponse(data, 200, { total: data.length, hasMore, ...(nextCursor ? { nextCursor } : {}) });
@@ -164,7 +173,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
   // POST: Create new entry (requires editor or admin)
   async function POST(request: NextRequest) {
     try {
-      // Check authentication and role
       const authHeader = request.headers.get("authorization");
       const authResult = await requireEditorOrAdmin(authHeader);
 
@@ -183,7 +191,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
 
       const validData = validation.data;
 
-      // Check for duplicates
       if (uniqueField) {
         const existingDocs = await adminDb
           .collection(collection)
@@ -197,11 +204,8 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
 
       const newDocRef = await adminDb.collection(collection).add(validData as Record<string, unknown>);
 
-      // Get the created document and add to cache
       const newDoc = await newDocRef.get();
       const newItem = { id: newDocRef.id, ...newDoc.data() };
-
-      // Smart cache update: add new item to existing cached lists
       cache.addItemToCollection(collection, newItem);
 
       logger.info("Document created", {
@@ -227,7 +231,7 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
   // PUT: Update existing entry (requires editor or admin)
   async function PUT(request: NextRequest) {
     try {
-      // Check authentication and role
+
       const authHeader = request.headers.get("authorization");
       const authResult = await requireEditorOrAdmin(authHeader);
 
@@ -253,7 +257,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         return notFoundResponse("Document");
       }
 
-      // Check if tts_url is being changed and cleanup old file
       const oldData = docSnapshot.data();
       const oldTtsUrl = oldData?.tts_url;
       const newTtsUrl = updateData.tts_url;
@@ -272,12 +275,8 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       }
 
       await docRef.update(updateData);
-
-      // Get updated document and update cache
       const updatedDoc = await docRef.get();
       const updatedItem = { id, ...updatedDoc.data() };
-
-      // Smart cache update: update item in existing cached lists
       cache.updateItemInCollection(collection, id, updatedItem);
 
       logger.info("Document updated", {

@@ -36,6 +36,9 @@ export default function TranslationsPage() {
       if (cursor) {
         params.set("cursor", cursor);
       }
+      if (searchTerm) {
+        params.set("ilokano", searchTerm.replace(/\*/g, "") + "*");
+      }
 
       const result = await fetchAPI(`/api/v1/translations?${params}`);
       setItems(result.data || []);
@@ -49,11 +52,13 @@ export default function TranslationsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchTerm]);
 
   useEffect(() => {
+    cursorMap.current = { 1: undefined };
+    setCurrentPage(1);
     fetchPage(1);
-  }, [fetchPage]);
+  }, [fetchPage, searchTerm]);
 
   function handlePageChange(page: number) {
     setCurrentPage(page);
@@ -61,12 +66,6 @@ export default function TranslationsPage() {
   }
 
   const totalDiscoveredPages = Math.max(...Object.keys(cursorMap.current).map(Number));
-
-  const filteredItems = items.filter(item =>
-    item.english.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.ilokano.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.tagalog.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <Box minHeight="100vh">
@@ -102,14 +101,14 @@ export default function TranslationsPage() {
           <Flex justify="center" py="9">
             <Spinner size="3" />
           </Flex>
-        ) : filteredItems.length === 0 ? (
+        ) : items.length === 0 ? (
           <Flex justify="center" py="9">
             <Text color="gray">No translations found</Text>
           </Flex>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredItems.map((item) => (
+              {items.map((item) => (
                 <Link key={item.id} href={`/translations/${item.id}`} style={{ textDecoration: "none" }}>
                   <Card size="2" style={{ cursor: "pointer" }} className="transition-shadow hover:shadow-lg">
                     <Flex direction="column" gap="3">

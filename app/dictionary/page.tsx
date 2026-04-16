@@ -28,12 +28,11 @@ export default function DictionaryPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const cursorMap = useRef<Record<number, string | undefined>>({ 1: undefined }); // page -> cursor
 
-  const fetchPage = useCallback(async (page: number, filter: string) => {
+  const fetchPage = useCallback(async (page: number, filter: string, search: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: String(ITEMS_PER_PAGE) });
@@ -43,6 +42,9 @@ export default function DictionaryPage() {
       const cursor = cursorMap.current[page];
       if (cursor) {
         params.set("cursor", cursor);
+      }
+      if (search) {
+        params.set("ilokanoWord", search.replace(/\*/g, "") + "*");
       }
 
       const result = await fetchAPI(`/api/v1/dictionary?${params}`);
@@ -61,24 +63,18 @@ export default function DictionaryPage() {
   }, []);
 
   useEffect(() => {
-    // Reset pagination when filter changes
+    
     cursorMap.current = { 1: undefined };
     setCurrentPage(1);
-    fetchPage(1, filter);
-  }, [filter, fetchPage]);
+    fetchPage(1, filter, searchTerm);
+  }, [filter, fetchPage, searchTerm]);
 
   function handlePageChange(page: number) {
     setCurrentPage(page);
-    fetchPage(page, filter);
+    fetchPage(page, filter, searchTerm);
   }
 
   const totalDiscoveredPages = Math.max(...Object.keys(cursorMap.current).map(Number));
-
-  const filteredItems = items.filter(item =>
-    item.ilokanoWord.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.englishTranslation.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.tagalogTranslation.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <Box minHeight="100vh">
@@ -124,14 +120,14 @@ export default function DictionaryPage() {
           <Flex justify="center" py="9">
             <Spinner size="3" />
           </Flex>
-        ) : filteredItems.length === 0 ? (
+        ) : items.length === 0 ? (
           <Flex justify="center" py="9">
             <Text color="gray">No words found</Text>
           </Flex>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredItems.map((item) => (
+              {items.map((item) => (
                 <Link key={item.id} href={`/dictionary/${item.id}`} style={{ textDecoration: "none" }}>
                   <Card size="2" style={{ cursor: "pointer" }} className="transition-shadow hover:shadow-lg">
                     <Flex justify="between" align="start" mb="2">

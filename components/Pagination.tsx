@@ -24,14 +24,13 @@ export function Pagination({
   // Build the page numbers to display
   const maxVisible = 5;
   const pages: (number | "ellipsis-start" | "ellipsis-end")[] = [];
-  const totalPages = hasMore ? totalDiscoveredPages + 1 : totalDiscoveredPages;
+  const totalPages = totalDiscoveredPages;
 
   if (totalPages <= maxVisible + 2) {
     // Show all pages if few enough
     for (let i = 1; i <= totalDiscoveredPages; i++) {
       pages.push(i);
     }
-    if (hasMore) pages.push(totalDiscoveredPages + 1);
   } else {
     // Always show first page
     pages.push(1);
@@ -49,7 +48,7 @@ export function Pagination({
 
     if (start > 2) pages.push("ellipsis-start");
     for (let i = start; i <= end; i++) {
-      if (i <= totalDiscoveredPages || (hasMore && i === totalDiscoveredPages + 1)) {
+      if (i <= totalDiscoveredPages) {
         pages.push(i);
       }
     }
@@ -57,7 +56,7 @@ export function Pagination({
 
     // Always show last known page
     if (totalPages > 1) {
-      const lastPage = hasMore ? totalDiscoveredPages + 1 : totalDiscoveredPages;
+      const lastPage = totalDiscoveredPages;
       if (!pages.includes(lastPage)) pages.push(lastPage);
     }
   }
@@ -84,8 +83,8 @@ export function Pagination({
         }
 
         const isActive = page === currentPage;
-        // Can only navigate to pages we have cursors for, or the next undiscovered page
-        const isNavigable = page <= totalDiscoveredPages || (hasMore && page === totalDiscoveredPages + 1);
+        // Can navigate to any page we have discovered
+        const isNavigable = page <= totalDiscoveredPages;
 
         return (
           <Button

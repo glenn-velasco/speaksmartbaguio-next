@@ -89,7 +89,7 @@ export default function EditTranslationPage() {
         router.push("/translations");
       }, 2000);
     } else {
-      setError(result.error);
+      setError(result.error || "An error occurred");
     }
   }
 

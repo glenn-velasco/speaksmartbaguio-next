@@ -3,6 +3,7 @@
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireAdmin, AuthenticatedUser, verifyToken } from "@/lib/auth-server";
+import { cache } from "@/lib/cache";
 import { setUserRole } from "@/lib/admin-roles";
 import { UserRole } from "@/lib/user-roles";
 
@@ -36,7 +37,7 @@ async function getAuthenticatedUser(token: string): Promise<AuthenticatedUser | 
   }
 }
 
-export async function createSubmission(submission: SubmissionData, authToken: string) {
+export async function createSubmission(submission: SubmissionData, authToken: string): Promise<{ success: boolean; id?: string; itemId?: string; message?: string; error?: string }> {
   try {
 
     const user = await getAuthenticatedUser(authToken);
@@ -71,7 +72,7 @@ export async function createSubmission(submission: SubmissionData, authToken: st
  * Create a submission and auto-approve it for admins.
  * The submission is recorded in the dashboard for audit trail, but applied immediately.
  */
-export async function createAndAutoApproveSubmission(submission: SubmissionData, authToken: string) {
+export async function createAndAutoApproveSubmission(submission: SubmissionData, authToken: string): Promise<{ success: boolean; id?: string; itemId?: string; message?: string; error?: string }> {
   try {
     const user = await getAuthenticatedUser(authToken);
 
@@ -101,15 +102,16 @@ export async function createAndAutoApproveSubmission(submission: SubmissionData,
     const docRef = await adminDb.collection("submissions").add(submissionData);
 
     // Apply the change immediately
-    await applySubmission(submissionData);
+    const itemId = await applySubmission(submissionData);
+    console.log("[createAndAutoApproveSubmission] Applied, itemId:", itemId);
 
     revalidatePath("/dashboard");
     revalidatePath(`/${submission.collection}`);
-    if (submission.targetId) {
-      revalidatePath(`/${submission.collection}/${submission.targetId}`);
-      revalidatePath(`/${submission.collection}/${submission.targetId}/edit`);
+    if (itemId) {
+      revalidatePath(`/${submission.collection}/${itemId}`);
+      revalidatePath(`/${submission.collection}/${itemId}/edit`);
     }
-    return { success: true, id: docRef.id, message: "Changes saved successfully" };
+    return { success: true, id: docRef.id, itemId: itemId || undefined, message: "Changes saved successfully" };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to save changes" };
   }
@@ -232,11 +234,42 @@ export async function reviewSubmission(id: string, action: "approve" | "reject",
     });
 
     if (action === "approve") {
-      await applySubmission(submission);
+      try {
+        console.log("[reviewSubmission] Applying submission:", { collection: submission.collection, action: submission.action, targetId: submission.targetId });
+        const itemId = await applySubmission(submission);
+        console.log("[reviewSubmission] Submission applied successfully, itemId:", itemId);
+        
+        // Invalidate API cache to ensure fresh data on next fetch
+        cache.invalidatePattern(`/api/v1/${submission.collection}`);
+        console.log("[reviewSubmission] API cache invalidated for:", `/api/v1/${submission.collection}`);
+        
+        // Revalidate the actual collection pages
+        revalidatePath(`/${submission.collection}`);
+        
+        // Revalidate the item page - for create, use itemId; for update, use targetId
+        const resolvedId = itemId || submission.targetId;
+        if (resolvedId) {
+          revalidatePath(`/${submission.collection}/${resolvedId}`);
+          revalidatePath(`/${submission.collection}/${resolvedId}/edit`);
+        }
+
+        revalidatePath("/dashboard");
+        return { 
+          success: true, 
+          message: `Submission ${action === "approve" ? "approved" : "rejected"} successfully`,
+          itemId: itemId,
+          collection: submission.collection,
+          action: submission.action,
+          targetId: submission.targetId
+        };
+      } catch (applyError: any) {
+        console.error("[reviewSubmission] Failed to apply submission:", applyError);
+        return { success: false, error: "Failed to apply submission: " + applyError.message };
+      }
     }
 
     revalidatePath("/dashboard");
-    return { success: true, message: `Submission ${action === "approve" ? "approved" : "rejected"} successfully` };
+    return { success: true, message: "Submission rejected successfully" };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to review submission" };
   }
@@ -305,40 +338,56 @@ export async function getDocumentById(collection: string, id: string) {
   }
 }
 
-async function applySubmission(submission: any) {
+export async function getItemById(collection: string, id: string) {
+  console.log("[getItemById] Fetching item directly from Firestore:", { collection, id });
+  return getDocumentById(collection, id);
+}
+
+async function applySubmission(submission: any): Promise<string | null> {
   const { collection, action, targetId, data } = submission;
+
+  console.log("[applySubmission] Processing:", { collection, action, targetId, dataKeys: Object.keys(data || {}) });
 
   if (collection === "roles" && action === "update") {
     if (targetId && data.role) {
       await setUserRole(targetId, data.role);
-      // Optional: Update the user's document in Firestore if it exists
       try {
         await adminDb.collection("users").doc(targetId).update({ role: data.role });
       } catch (e) {
-        // Ignored if user profile doesn't exist
+        console.log("[applySubmission] User profile update skipped (may not exist)");
       }
     }
-    return;
+    return targetId;
   }
+
+  let itemId: string | null = null;
 
   switch (action) {
     case "create": {
-      await adminDb.collection(collection).add(data);
+      const docRef = await adminDb.collection(collection).add(data);
+      itemId = docRef.id;
+      console.log("[applySubmission] Created document with ID:", itemId);
       break;
     }
     case "update": {
       if (targetId) {
         await adminDb.collection(collection).doc(targetId).update(data);
+        itemId = targetId;
+        console.log("[applySubmission] Updated document:", itemId);
       }
       break;
     }
     case "delete": {
       if (targetId) {
         await adminDb.collection(collection).doc(targetId).delete();
+        console.log("[applySubmission] Deleted document:", targetId);
       }
       break;
     }
   }
+
+  console.log("[applySubmission] Returning itemId:", itemId);
+  return itemId;
 }
 
 /**

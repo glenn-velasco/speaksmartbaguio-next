@@ -3,14 +3,14 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { createSubmission } from "@/lib/actions";
+import { createSubmission, createAndAutoApproveSubmission } from "@/lib/actions";
 import { Select, Button, Card, Heading, Text, Flex, Box, Container, Spinner, Callout, TextField } from "@radix-ui/themes";
 import { AlertCircle, Check } from "lucide-react";
 import { AudioUploadInput } from "@/components/AudioUploadInput";
 import { AudioPreview } from "@/components/AudioPreview";
 
 function PhrasebookForm() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialPhrase = searchParams.get("phrase") || searchParams.get("word");
@@ -18,6 +18,7 @@ function PhrasebookForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [isDirectEdit, setIsDirectEdit] = useState(false);
   const [uploadedAudioUrl, setUploadedAudioUrl] = useState("");
 
   const [formData, setFormData] = useState({
@@ -55,34 +56,60 @@ function PhrasebookForm() {
     setError("");
 
     const token = await user.getIdToken();
-    const result = await createSubmission({
-      collection: "phrasebook",
-      action: "create",
-      data: formData,
-    }, token);
+
+    let result;
+    if (role === "admin") {
+      result = await createAndAutoApproveSubmission({
+        collection: "phrasebook",
+        action: "create",
+        data: formData,
+      }, token);
+      if (result.success) {
+        setIsDirectEdit(true);
+      }
+    } else {
+      result = await createSubmission({
+        collection: "phrasebook",
+        action: "create",
+        data: formData,
+      }, token);
+    }
 
     setLoading(false);
 
     if (result.success) {
       setSuccess(true);
-      setTimeout(() => {
-        router.push("/phrasebook");
-      }, 2000);
+      
+      const newItemId = result.itemId;
+      if (role === "admin" && newItemId) {
+        router.push(`/phrasebook/${newItemId}`);
+      } else {
+        setTimeout(() => {
+          router.push("/phrasebook");
+        }, 2000);
+      }
     } else {
-      setError(result.error);
+      setError(result.error || "An error occurred");
     }
   }
 
   if (success) {
-    return (
-      <Flex minHeight="100vh" align="center" justify="center">
-        <Flex direction="column" align="center" gap="3">
-          <Check className="w-12 h-12" style={{ color: "var(--green-9)" }} />
-          <Heading size="5" highContrast>Submission Created!</Heading>
-          <Text color="gray">Your suggestion is pending admin approval.</Text>
+    if (!isDirectEdit) {
+      return (
+        <Flex minHeight="100vh" align="center" justify="center">
+          <Flex direction="column" align="center" gap="3">
+            <Check className="w-12 h-12" style={{ color: "var(--green-9)" }} />
+            <Heading size="5" highContrast>
+              Submission Created!
+            </Heading>
+            <Text color="gray">
+              Your suggestion is pending admin approval.
+            </Text>
+          </Flex>
         </Flex>
-      </Flex>
-    );
+      );
+    }
+    return null;
   }
 
   return (
@@ -90,7 +117,9 @@ function PhrasebookForm() {
       <Container size="2" px="4" py="6">
         <Heading size="7" mb="1" highContrast>Add New Phrase</Heading>
         <Text color="gray" size="3" as="p" mb="6">
-          Submit a new Ilokano phrase. An admin will review before it&apos;s published.
+          {role === "admin"
+            ? "Add a new Ilokano phrase. Changes are applied immediately."
+            : "Submit a new Ilokano phrase. An admin will review before it&apos;s published."}
         </Text>
 
         {error && (
@@ -155,10 +184,10 @@ function PhrasebookForm() {
                 </Flex>
               </Box>
 
-              <Flex gap="3">
-                <Button type="submit" disabled={loading} size="3" style={{ flex: 1 }}>
-                  {loading ? "Submitting..." : "Submit for Review"}
-                </Button>
+                <Flex gap="3">
+                  <Button type="submit" disabled={loading} size="3" style={{ flex: 1 }}>
+                    {loading ? (role === "admin" ? "Saving..." : "Submitting...") : (role === "admin" ? "Add Phrase" : "Submit for Review")}
+                  </Button>
                 <Button type="button" variant="soft" color="gray" size="3" onClick={() => router.back()}>
                   Cancel
                 </Button>

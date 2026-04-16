@@ -69,6 +69,15 @@ export default function AdminDashboard() {
     if (result.success) {
       setSelectedSubmission(null);
       setAdminNote("");
+      
+      if (action === "approve" && result.itemId) {
+        const collection = result.collection || selectedSubmission.collection;
+        const itemId = result.itemId;
+        console.log("[Dashboard] Redirecting to:", `/${collection}/${itemId}`, { result });
+        router.push(`/${collection}/${itemId}`);
+        return;
+      }
+
       const statusFilter = filterStatus === "all" ? undefined : filterStatus;
       const data = await getSubmissions(statusFilter);
       setSubmissions(data as Submission[]);

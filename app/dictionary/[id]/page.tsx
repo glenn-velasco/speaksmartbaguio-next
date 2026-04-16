@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { createSubmission } from "@/lib/actions";
-import { fetchAPI } from "@/lib/fetch-api";
+import { createSubmission, getItemById } from "@/lib/actions";
 import { AlertDialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, Spinner, DataList } from "@radix-ui/themes";
 import { AudioPlayButton } from "@/components/AudioPlayButton";
 
@@ -22,8 +21,9 @@ export default function DictionaryDetailPage() {
   useEffect(() => {
     async function fetchItem() {
       try {
-        const result = await fetchAPI(`/api/v1/dictionary?limit=100`);
-        const found = result.data.find((i: any) => i.id === id);
+        console.log("[DictionaryDetail] Fetching item:", id);
+        const found = await getItemById("dictionary", id);
+        console.log("[DictionaryDetail] Found item:", found);
         setItem(found || null);
       } catch (error) {
         console.error("Failed to fetch item:", error);

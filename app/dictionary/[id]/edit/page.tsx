@@ -109,7 +109,7 @@ export default function EditDictionaryPage() {
         router.push("/dictionary");
       }, 2000);
     } else {
-      setError(result.error);
+      setError(result.error || "An error occurred");
     }
   }
 
