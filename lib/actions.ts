@@ -476,12 +476,27 @@ export async function getAllUsers(options?: {
         emailVerified: user.emailVerified,
         createdAt: user.metadata.creationTime,
         lastSignIn: user.metadata.lastSignInTime,
-        role: "viewer" as UserRole,
       })));
       pageToken = listUsersResult.pageToken;
     } while (pageToken);
 
-    let users = allUsers;
+    const roleMap = new Map<string, UserRole>();
+    
+    if (allUsers.length > 0) {
+      const uids = allUsers.map(u => u.uid);
+      const getUsersResult = await adminAuth.getUsers(
+        uids.map(uid => ({ uid }))
+      );
+      for (const u of getUsersResult.users) {
+        const claims = u.customClaims as { role?: UserRole } | null;
+        roleMap.set(u.uid, claims?.role || "viewer");
+      }
+    }
+
+    let users = allUsers.map(user => ({
+      ...user,
+      role: roleMap.get(user.uid) || "viewer" as UserRole,
+    }));
 
     if (options?.searchQuery) {
       const searchQuery = options.searchQuery.toLowerCase();
