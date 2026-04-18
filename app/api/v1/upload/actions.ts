@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import {
   generatePresignedUploadUrl,
   transformStorageKeyToUrl,
@@ -10,7 +10,6 @@ import {
 } from "@/lib/storage";
 import { validateAudioFileServer } from "@/lib/audio-validation";
 import { adminDb } from "@/lib/firebase-admin";
-import { cache } from "@/lib/cache";
 
 export interface GenerateUploadUrlResult {
   success: boolean;
@@ -119,7 +118,7 @@ export async function completeUploadAction(
       updated_at: new Date().toISOString(),
     });
 
-    await cache.invalidatePattern(`/${collection}`);
+    revalidateTag(collection, 'max');
 
     revalidatePath(`/${collection}`);
     revalidatePath(`/${collection}/${itemId}`);

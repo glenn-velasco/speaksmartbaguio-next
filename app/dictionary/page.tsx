@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Tabs, Flex, Heading, Text, Button, Card, Badge, Spinner, Container, Box, TextField } from "@radix-ui/themes";
@@ -30,18 +30,17 @@ export default function DictionaryPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const cursorMap = useRef<Record<number, string | undefined>>({ 1: undefined }); // page -> cursor
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchPage = useCallback(async (page: number, filter: string, search: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: String(ITEMS_PER_PAGE) });
+      const params = new URLSearchParams({
+        limit: String(ITEMS_PER_PAGE),
+        page: String(page),
+      });
       if (filter !== "all") {
         params.set("partOfSpeech", filter);
-      }
-      const cursor = cursorMap.current[page];
-      if (cursor) {
-        params.set("cursor", cursor);
       }
       if (search) {
         params.set("ilokanoWord", search.replace(/\*/g, "") + "*");
@@ -50,11 +49,7 @@ export default function DictionaryPage() {
       const result = await fetchAPI(`/api/v1/dictionary?${params}`);
       setItems(result.data || []);
       setHasMore(result.hasMore || false);
-
-      // Store cursor for the next page
-      if (result.nextCursor) {
-        cursorMap.current[page + 1] = result.nextCursor;
-      }
+      setTotalCount(result.totalCount || 0);
     } catch (error) {
       console.error("Failed to fetch dictionary:", error);
     } finally {
@@ -63,8 +58,6 @@ export default function DictionaryPage() {
   }, []);
 
   useEffect(() => {
-    
-    cursorMap.current = { 1: undefined };
     setCurrentPage(1);
     fetchPage(1, filter, searchTerm);
   }, [filter, fetchPage, searchTerm]);
@@ -73,8 +66,6 @@ export default function DictionaryPage() {
     setCurrentPage(page);
     fetchPage(page, filter, searchTerm);
   }
-
-  const totalDiscoveredPages = Math.max(...Object.keys(cursorMap.current).map(Number));
 
   return (
     <Box minHeight="100vh">
@@ -154,7 +145,8 @@ export default function DictionaryPage() {
             <Pagination
               hasMore={hasMore}
               currentPage={currentPage}
-              totalDiscoveredPages={totalDiscoveredPages}
+              totalItems={totalCount}
+              itemsPerPage={ITEMS_PER_PAGE}
               onPageChange={handlePageChange}
               loading={loading}
             />

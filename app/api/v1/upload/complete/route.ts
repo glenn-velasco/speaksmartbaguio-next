@@ -3,7 +3,7 @@ import { requireEditorOrAdmin } from "@/lib/auth-server";
 import { badRequestResponse, successResponse, errorResponse, notFoundResponse } from "@/lib/response";
 import { isStorageConfigured, getActiveStorageBackend } from "@/lib/storage";
 import { adminDb } from "@/lib/firebase-admin";
-import { cache } from "@/lib/cache";
+import { revalidateTag } from "next/cache";
 import { cleanupOldAudioFile } from "@/lib/audio-cleanup";
 import { z } from "zod";
 
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     const updatedDoc = await docRef.get();
     const updatedItem = { id: itemId, ...updatedDoc.data() };
 
-    cache.updateItemInCollection(collection, itemId, updatedItem);
+    revalidateTag(collection, 'max');
 
     return successResponse({
       success: true,

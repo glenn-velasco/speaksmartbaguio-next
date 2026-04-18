@@ -10,8 +10,10 @@ interface ApiSuccess<T> {
   data: T;
   message?: string;
   total?: number;
+  totalCount?: number;
   hasMore?: boolean;
   nextCursor?: string;
+  page?: number;
 }
 
 export function errorResponse(status: number, error: string, code?: string, details?: unknown): NextResponse<ApiError> {

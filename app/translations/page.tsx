@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAPI } from "@/lib/fetch-api";
@@ -25,16 +25,15 @@ export default function TranslationsPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const cursorMap = useRef<Record<number, string | undefined>>({ 1: undefined });
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchPage = useCallback(async (page: number) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: String(ITEMS_PER_PAGE) });
-      const cursor = cursorMap.current[page];
-      if (cursor) {
-        params.set("cursor", cursor);
-      }
+      const params = new URLSearchParams({
+        limit: String(ITEMS_PER_PAGE),
+        page: String(page),
+      });
       if (searchTerm) {
         params.set("ilokano", searchTerm.replace(/\*/g, "") + "*");
       }
@@ -42,10 +41,7 @@ export default function TranslationsPage() {
       const result = await fetchAPI(`/api/v1/translations?${params}`);
       setItems(result.data || []);
       setHasMore(result.hasMore || false);
-
-      if (result.nextCursor) {
-        cursorMap.current[page + 1] = result.nextCursor;
-      }
+      setTotalCount(result.totalCount || 0);
     } catch (error) {
       console.error("Failed to fetch translations:", error);
     } finally {
@@ -54,7 +50,6 @@ export default function TranslationsPage() {
   }, [searchTerm]);
 
   useEffect(() => {
-    cursorMap.current = { 1: undefined };
     setCurrentPage(1);
     fetchPage(1);
   }, [fetchPage, searchTerm]);
@@ -63,8 +58,6 @@ export default function TranslationsPage() {
     setCurrentPage(page);
     fetchPage(page);
   }
-
-  const totalDiscoveredPages = Math.max(...Object.keys(cursorMap.current).map(Number));
 
   return (
     <Box minHeight="100vh">
@@ -134,7 +127,8 @@ export default function TranslationsPage() {
             <Pagination
               hasMore={hasMore}
               currentPage={currentPage}
-              totalDiscoveredPages={totalDiscoveredPages}
+              totalItems={totalCount}
+              itemsPerPage={ITEMS_PER_PAGE}
               onPageChange={handlePageChange}
               loading={loading}
             />

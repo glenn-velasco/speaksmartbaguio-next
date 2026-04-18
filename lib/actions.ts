@@ -1,9 +1,8 @@
 "use server";
 
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
-import { revalidatePath } from "next/cache";
-import { requireAuth, requireAdmin, AuthenticatedUser, verifyToken } from "@/lib/auth-server";
-import { cache } from "@/lib/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { requireAuth, requireAdmin, AuthenticatedUser, verifyToken, invalidatePermissionsCache } from "@/lib/auth-server";
 import { setUserRole } from "@/lib/admin-roles";
 import { UserRole } from "@/lib/user-roles";
 import { generateSearchFields } from "./search-utils";
@@ -88,7 +87,7 @@ export async function updateRolePermissions(role: string, permissions: Permissio
       updatedBy: user.uid,
     }, { merge: true });
 
-    cache.invalidate(`permissions:${role}`);
+    invalidatePermissionsCache(role as UserRole);
 
     revalidatePath("/dashboard");
     return { success: true, message: `Permissions for ${role} updated successfully` };
@@ -306,7 +305,7 @@ export async function reviewSubmission(id: string, action: "approve" | "reject",
         
         const itemId = await applySubmission(submission);
         
-        cache.invalidatePattern(`/api/v1/${submission.collection}`);
+        revalidateTag(submission.collection, 'max');
 
         revalidatePath(`/${submission.collection}`);
         

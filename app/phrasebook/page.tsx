@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAPI } from "@/lib/fetch-api";
@@ -28,16 +28,15 @@ export default function PhrasebookPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const cursorMap = useRef<Record<number, string | undefined>>({ 1: undefined });
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchPage = useCallback(async (page: number, search: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: String(ITEMS_PER_PAGE) });
-      const cursor = cursorMap.current[page];
-      if (cursor) {
-        params.set("cursor", cursor);
-      }
+      const params = new URLSearchParams({
+        limit: String(ITEMS_PER_PAGE),
+        page: String(page),
+      });
       if (search) {
         params.set("ilokanoWord", search.replace(/\*/g, "") + "*");
       }
@@ -45,10 +44,7 @@ export default function PhrasebookPage() {
       const result = await fetchAPI(`/api/v1/phrasebook?${params}`);
       setItems(result.data || []);
       setHasMore(result.hasMore || false);
-
-      if (result.nextCursor) {
-        cursorMap.current[page + 1] = result.nextCursor;
-      }
+      setTotalCount(result.totalCount || 0);
     } catch (error) {
       console.error("Failed to fetch phrasebook:", error);
     } finally {
@@ -57,7 +53,6 @@ export default function PhrasebookPage() {
   }, []);
 
   useEffect(() => {
-    cursorMap.current = { 1: undefined };
     setCurrentPage(1);
     fetchPage(1, searchTerm);
   }, [fetchPage, searchTerm]);
@@ -67,7 +62,6 @@ export default function PhrasebookPage() {
     fetchPage(page, searchTerm);
   }
 
-  const totalDiscoveredPages = Math.max(...Object.keys(cursorMap.current).map(Number));
   return (
     <Box minHeight="100vh">
       <Container size="4" px="4" py="6">
@@ -134,7 +128,8 @@ export default function PhrasebookPage() {
             <Pagination
               hasMore={hasMore}
               currentPage={currentPage}
-              totalDiscoveredPages={totalDiscoveredPages}
+              totalItems={totalCount}
+              itemsPerPage={ITEMS_PER_PAGE}
               onPageChange={handlePageChange}
               loading={loading}
             />

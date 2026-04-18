@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
-import { cache, DEFAULT_CACHE_TTL, generateCacheKey } from "@/lib/cache";
+import { unstable_cache, revalidateTag } from "next/cache";
 import {
   successResponse,
   notFoundResponse,
@@ -24,23 +24,10 @@ export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema
   createSchema: CreateSchema;
   updateSchema: UpdateSchema;
   uniqueField?: string;
-  cacheTTL?: number;
   filterableFields?: string[];
   searchableFields?: string[];
-  /**
-   * Required permission for POST operations.
-   * Default: <collection>:create
-   */
   createPermission?: Permission;
-  /**
-   * Required permission for PUT operations.
-   * Default: <collection>:edit
-   */
   updatePermission?: Permission;
-  /**
-   * Required permission for DELETE operations.
-   * Default: <collection>:delete
-   */
   deletePermission?: Permission;
 }
 
@@ -133,6 +120,35 @@ function buildFilterQuery(
   return { query, searchField };
 }
 
+function buildCountQuery(
+  collection: string,
+  filterableFields: string[],
+  searchParams: URLSearchParams,
+  searchField?: string,
+): FirebaseFirestore.Query {
+  let query: FirebaseFirestore.Query = adminDb.collection(collection);
+  let hasRangeQuery = false;
+
+  for (const field of filterableFields) {
+    const value = searchParams.get(field);
+    if (value) {
+      if (value.includes("*")) {
+        const prefix = value.replace(/\*/g, "");
+        if (prefix && !hasRangeQuery) {
+          if (searchField) {
+            query = query.where(searchField, ">=", prefix.toLowerCase()).where(searchField, "<=", prefix.toLowerCase() + "\uf8ff");
+          }
+          hasRangeQuery = true;
+        }
+      } else if (!hasRangeQuery) {
+        query = query.where(field, "==", value);
+      }
+    }
+  }
+
+  return query;
+}
+
 export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema extends z.ZodType>(
   options: CRUDHandlerOptions<CreateSchema, UpdateSchema>,
 ) {
@@ -141,7 +157,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     createSchema,
     updateSchema,
     uniqueField,
-    cacheTTL = DEFAULT_CACHE_TTL,
     filterableFields = [],
     searchableFields = [],
     createPermission,
@@ -153,66 +168,85 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
   const resolvedUpdatePermission: Permission = updatePermission || `${collection}:edit` as Permission;
   const resolvedDeletePermission: Permission = deletePermission || `${collection}:delete` as Permission;
 
+  async function fetchCollectionData(
+    collectionName: string,
+    filterParams: string,
+    limit: number,
+    offset: number,
+  ) {
+    const params = new URLSearchParams(filterParams);
+    const queryObj = buildFilterQuery(collectionName, filterableFields, params, searchableFields);
+    let query = queryObj.query;
+    const searchField = queryObj.searchField;
+
+    if (searchField) {
+      query = query.orderBy(searchField);
+    } else {
+      query = query.orderBy("__name__");
+    }
+
+    query = query.offset(offset).limit(limit + 1);
+
+    const snapshot = await query.get();
+
+    const countQuery = buildCountQuery(collectionName, filterableFields, params, searchField);
+    const countSnapshot = await countQuery.get();
+    const totalCount = countSnapshot.size;
+
+    if (snapshot.empty) {
+      return {
+        data: [],
+        total: 0,
+        totalCount,
+        hasMore: false,
+      };
+    }
+
+    const docs = snapshot.docs;
+    const hasMore = docs.length > limit;
+    const resultDocs = hasMore ? docs.slice(0, limit) : docs;
+
+    const data = resultDocs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    const transformedData = await transformDocumentsTtsUrl(data);
+
+    return {
+      data: transformedData,
+      total: transformedData.length,
+      totalCount,
+      hasMore,
+    };
+  }
+
   async function GET(request: NextRequest) {
     try {
       const searchParams = request.nextUrl.searchParams;
-      const { limit, cursor } = parsePaginationParams(request);
+      const { limit, page } = parsePaginationParams(request);
+      const offset = (page - 1) * limit;
 
-      const cacheKey = generateCacheKey(`/api/v1/${collection}`, Object.fromEntries(searchParams.entries()));
+      const filterParams = Object.fromEntries(searchParams.entries());
+      const filterString = JSON.stringify(filterParams);
 
-      const cached = cache.get(cacheKey);
-
-      if (cached) {
-        logger.debug("Cache hit", { collection, cacheKey });
-        
-        const transformedCached = await transformDocumentsTtsUrl((cached as { data: Array<{ id: string; [key: string]: unknown }> }).data);
-        return NextResponse.json({ ...cached, data: transformedCached }, { status: 200 });
-      }
-      const queryObj = buildFilterQuery(collection, filterableFields, searchParams, searchableFields);
-      let query = queryObj.query;
-      const searchField = queryObj.searchField;
-
-      if (searchField) {
-        query = query.orderBy(searchField);
-      } else {
-        query = query.orderBy("__name__");
-      }
-
-      if (cursor) {
-        const cursorDoc = await adminDb.collection(collection).doc(cursor).get();
-        if (cursorDoc.exists) {
-          query = query.startAfter(cursorDoc);
+      const cachedFetch = unstable_cache(
+        fetchCollectionData,
+        [collection, "fetch"],
+        {
+          tags: [collection],
+          revalidate: 60,
         }
-      }
+      );
 
-      const snapshot = await query.limit(limit + 1).get();
+      const result = await cachedFetch(collection, filterString, limit, offset);
 
-      if (snapshot.empty) {
-        return successResponse([], 200, { total: 0, hasMore: false });
-      }
-
-      const docs = snapshot.docs;
-      const hasMore = docs.length > limit;
-      const resultDocs = hasMore ? docs.slice(0, limit) : docs;
-      const nextCursor = hasMore ? resultDocs[resultDocs.length - 1].id : undefined;
-
-      const data = resultDocs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      const transformedData = await transformDocumentsTtsUrl(data);
-
-      const result = {
-        data: transformedData,
-        total: transformedData.length,
-        hasMore,
-        ...(nextCursor ? { nextCursor } : {}),
-      };
-
-      cache.set(cacheKey, result, cacheTTL);
-
-      return successResponse(transformedData, 200, { total: transformedData.length, hasMore, ...(nextCursor ? { nextCursor } : {}) });
+      return successResponse(result.data, 200, {
+        total: result.total,
+        totalCount: result.totalCount,
+        hasMore: result.hasMore,
+        page,
+      });
     } catch (error) {
       logger.error("GET request failed", { collection, error: (error as Error).message });
       return serverErrorResponse("Failed to fetch records");
@@ -258,9 +292,7 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
 
       const newDocRef = await adminDb.collection(collection).add(validData);
 
-      const newDoc = await newDocRef.get();
-      const newItem = { id: newDocRef.id, ...newDoc.data() };
-      cache.addItemToCollection(collection, newItem);
+      revalidateTag(collection, 'max');
 
       logger.info("Document created", {
         collection,
@@ -334,9 +366,8 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       }
 
       await docRef.update(updateData);
-      const updatedDoc = await docRef.get();
-      const updatedItem = { id, ...updatedDoc.data() };
-      cache.updateItemInCollection(collection, id, updatedItem);
+
+      revalidateTag(collection, 'max');
 
       logger.info("Document updated", {
         collection,
@@ -399,7 +430,7 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
 
       await docRef.delete();
 
-      cache.removeItemFromCollection(collection, id);
+      revalidateTag(collection, 'max');
 
       logger.info("Document deleted", {
         collection,

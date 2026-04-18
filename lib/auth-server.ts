@@ -1,7 +1,6 @@
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { UserRole } from "@/lib/user-roles";
 import { Permission, DEFAULT_ROLE_PERMISSIONS } from "@/lib/permissions";
-import { cache } from "@/lib/cache";
 
 export interface AuthenticatedUser {
   uid: string;
@@ -17,15 +16,16 @@ export interface AuthError {
 }
 
 const PERMISSIONS_CACHE_TTL = 300_000; // 5 minutes
+const permissionsCache = new Map<string, { permissions: Permission[]; expiresAt: number }>();
 
 /**
  * Get permissions for a specific role from Firestore, with fallback to defaults.
  */
 export async function getPermissionsForRole(role: UserRole): Promise<Permission[]> {
   const cacheKey = `permissions:${role}`;
-  const cached = cache.get<Permission[]>(cacheKey);
+  const cached = permissionsCache.get(cacheKey);
   
-  if (cached) return cached;
+  if (cached && cached.expiresAt > Date.now()) return cached.permissions;
 
   try {
     const doc = await adminDb.collection("roles").doc(role).get();
@@ -34,7 +34,7 @@ export async function getPermissionsForRole(role: UserRole): Promise<Permission[
       const data = doc.data();
       if (data && Array.isArray(data.permissions)) {
         const permissions = data.permissions as Permission[];
-        cache.set(cacheKey, permissions, PERMISSIONS_CACHE_TTL);
+        permissionsCache.set(cacheKey, { permissions, expiresAt: Date.now() + PERMISSIONS_CACHE_TTL });
         return permissions;
       }
     }
@@ -50,12 +50,19 @@ export async function getPermissionsForRole(role: UserRole): Promise<Permission[
       console.warn(`Failed to initialize default permissions for role: ${role}`);
     }
 
-    cache.set(cacheKey, defaultPermissions, PERMISSIONS_CACHE_TTL);
+    permissionsCache.set(cacheKey, { permissions: defaultPermissions, expiresAt: Date.now() + PERMISSIONS_CACHE_TTL });
     return defaultPermissions;
   } catch (error) {
     console.error(`Error fetching permissions for role ${role}:`, error);
     return DEFAULT_ROLE_PERMISSIONS[role] || [];
   }
+}
+
+/**
+ * Invalidate cached permissions for a specific role.
+ */
+export function invalidatePermissionsCache(role: UserRole): void {
+  permissionsCache.delete(`permissions:${role}`);
 }
 
 /**

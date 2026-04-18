@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
-import { cache, DEFAULT_CACHE_TTL, generateCacheKey } from "@/lib/cache";
 import {
   successResponse,
   badRequestResponse,
@@ -48,23 +47,11 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const { limit, cursor } = parsePaginationParams(request);
+    const { limit, page } = parsePaginationParams(request);
+    const offset = (page - 1) * limit;
 
     const roleFilter = searchParams.get("role") as UserRole | null;
     const searchQuery = searchParams.get("search")?.toLowerCase() || null;
-
-    if (!searchQuery) {
-      const cacheKey = generateCacheKey(
-        "/api/v1/users",
-        Object.fromEntries(searchParams.entries())
-      );
-
-      const cached = cache.get(cacheKey);
-      if (cached) {
-        logger.debug("Cache hit", { cacheKey });
-        return NextResponse.json(cached, { status: 200 });
-      }
-    }
 
     let query: FirebaseFirestore.Query = adminDb.collection("users");
 
@@ -72,25 +59,20 @@ export async function GET(request: NextRequest) {
       query = query.where("role", "==", roleFilter);
     }
 
-    if (cursor) {
-      const cursorDoc = await adminDb.collection("users").doc(cursor).get();
-      if (cursorDoc.exists) {
-        query = query.orderBy("__name__").startAfter(cursorDoc);
-      }
-    } else {
-      query = query.orderBy("__name__");
-    }
+    query = query.orderBy("__name__").offset(offset).limit(limit + 1);
 
-    const snapshot = await query.limit(limit + 1).get();
+    const snapshot = await query.get();
 
     if (snapshot.empty) {
-      return successResponse([], 200, { total: 0, hasMore: false });
+      const countQuery = adminDb.collection("users");
+      const countFilter = roleFilter ? countQuery.where("role", "==", roleFilter) : countQuery;
+      const countSnapshot = await countFilter.get();
+      return successResponse([], 200, { total: 0, totalCount: countSnapshot.size, hasMore: false });
     }
 
     const docs = snapshot.docs;
     const hasMore = docs.length > limit;
     const resultDocs = hasMore ? docs.slice(0, limit) : docs;
-    const nextCursor = hasMore ? resultDocs[resultDocs.length - 1].id : undefined;
 
     let users = resultDocs.map((doc) => ({
       uid: doc.id,
@@ -123,25 +105,15 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    const result = {
-      data: enrichedUsers,
-      total: enrichedUsers.length,
-      hasMore,
-      ...(nextCursor ? { nextCursor } : {}),
-    };
-
-    if (!searchQuery) {
-      const cacheKey = generateCacheKey(
-        "/api/v1/users",
-        Object.fromEntries(searchParams.entries())
-      );
-      cache.set(cacheKey, result, DEFAULT_CACHE_TTL);
-    }
+    const countQuery = adminDb.collection("users");
+    const countFilter = roleFilter ? countQuery.where("role", "==", roleFilter) : countQuery;
+    const countSnapshot = await countFilter.get();
+    const totalCount = countSnapshot.size;
 
     return successResponse(enrichedUsers, 200, {
       total: enrichedUsers.length,
+      totalCount,
       hasMore,
-      ...(nextCursor ? { nextCursor } : {}),
     });
   } catch (error) {
     logger.error("GET users failed", { error: (error as Error).message });

@@ -6,7 +6,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 interface PaginationProps {
   hasMore: boolean;
   currentPage: number;
-  totalDiscoveredPages: number;
+  totalItems: number;
+  itemsPerPage: number;
   onPageChange: (page: number) => void;
   loading?: boolean;
 }
@@ -14,32 +15,28 @@ interface PaginationProps {
 export function Pagination({
   hasMore,
   currentPage,
-  totalDiscoveredPages,
+  totalItems,
+  itemsPerPage,
   onPageChange,
   loading = false,
 }: PaginationProps) {
-  // Don't show pagination if only 1 page and no more
-  if (totalDiscoveredPages <= 1 && !hasMore) return null;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-  // Build the page numbers to display
+  if (totalPages <= 1) return null;
+
   const maxVisible = 5;
   const pages: (number | "ellipsis-start" | "ellipsis-end")[] = [];
-  const totalPages = totalDiscoveredPages;
 
   if (totalPages <= maxVisible + 2) {
-    // Show all pages if few enough
-    for (let i = 1; i <= totalDiscoveredPages; i++) {
+    for (let i = 1; i <= totalPages; i++) {
       pages.push(i);
     }
   } else {
-    // Always show first page
     pages.push(1);
 
-    // Calculate window around current page
     let start = Math.max(2, currentPage - 1);
     let end = Math.min(totalPages - 1, currentPage + 1);
 
-    // Adjust window size
     if (currentPage <= 3) {
       end = Math.min(maxVisible, totalPages - 1);
     } else if (currentPage >= totalPages - 2) {
@@ -48,17 +45,11 @@ export function Pagination({
 
     if (start > 2) pages.push("ellipsis-start");
     for (let i = start; i <= end; i++) {
-      if (i <= totalDiscoveredPages) {
-        pages.push(i);
-      }
+      pages.push(i);
     }
     if (end < totalPages - 1) pages.push("ellipsis-end");
 
-    // Always show last known page
-    if (totalPages > 1) {
-      const lastPage = totalDiscoveredPages;
-      if (!pages.includes(lastPage)) pages.push(lastPage);
-    }
+    if (!pages.includes(totalPages)) pages.push(totalPages);
   }
 
   return (
@@ -73,7 +64,7 @@ export function Pagination({
         <ChevronLeft className="w-4 h-4" />
       </IconButton>
 
-      {pages.map((page, idx) => {
+      {pages.map((page) => {
         if (page === "ellipsis-start" || page === "ellipsis-end") {
           return (
             <Text key={page} size="2" color="gray" style={{ width: 32, textAlign: "center" }}>
@@ -83,8 +74,6 @@ export function Pagination({
         }
 
         const isActive = page === currentPage;
-        // Can navigate to any page we have discovered
-        const isNavigable = page <= totalDiscoveredPages;
 
         return (
           <Button
@@ -92,7 +81,7 @@ export function Pagination({
             variant={isActive ? "solid" : "soft"}
             color={isActive ? "indigo" : "gray"}
             size="2"
-            disabled={loading || !isNavigable}
+            disabled={loading}
             onClick={() => onPageChange(page)}
             style={{ minWidth: 36 }}
           >
