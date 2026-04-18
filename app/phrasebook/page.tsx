@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAPI } from "@/lib/fetch-api";
-import { Flex, Heading, Text, Button, Card, Badge, Spinner, Container, Box, TextField } from "@radix-ui/themes";
+import { Tabs, Flex, Heading, Text, Button, Card, Badge, Spinner, Container, Box, TextField } from "@radix-ui/themes";
 import { Pagination } from "@/components/Pagination";
 import { AudioPlayButton } from "@/components/AudioPlayButton";
 import { Search } from "lucide-react";
+import { usePagination } from "@/hooks/usePagination";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -24,24 +25,46 @@ export default function PhrasebookPage() {
   const { user, hasPermission } = useAuth();
   const [items, setItems] = useState<PhrasebookItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-
-  const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState("all");
 
-  const fetchPage = useCallback(async (page: number, search: string) => {
+  const { currentPage, goToPage } = usePagination({
+    storageKey: "pagination:phrasebook",
+  });
+
+  const prevFilterRef = useRef(filter);
+  const prevSearchRef = useRef(searchTerm);
+
+  useEffect(() => {
+    const filterChanged = prevFilterRef.current !== filter;
+    const searchChanged = prevSearchRef.current !== searchTerm;
+    prevFilterRef.current = filter;
+    prevSearchRef.current = searchTerm;
+
+    if (filterChanged || searchChanged) {
+      goToPage(1);
+    }
+  }, [filter, searchTerm, goToPage]);
+
+  const fetchPage = useCallback(async (page: number, filterVal: string, searchVal: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
         limit: String(ITEMS_PER_PAGE),
         page: String(page),
       });
-      if (search) {
-        params.set("ilokanoWord", search.replace(/\*/g, "") + "*");
+      if (filterVal !== "all") {
+        params.set("partOfSpeech", filterVal);
+      }
+      if (searchVal) {
+        params.set("ilokanoWord", searchVal.replace(/\*/g, "") + "*");
       }
 
+      console.log("Fetching phrasebook with params:", params.toString());
       const result = await fetchAPI(`/api/v1/phrasebook?${params}`);
+      console.log("Phrasebook result:", result.data?.length, "items, totalCount:", result.totalCount);
       setItems(result.data || []);
       setHasMore(result.hasMore || false);
       setTotalCount(result.totalCount || 0);
@@ -53,14 +76,9 @@ export default function PhrasebookPage() {
   }, []);
 
   useEffect(() => {
-    setCurrentPage(1);
-    fetchPage(1, searchTerm);
-  }, [fetchPage, searchTerm]);
-
-  function handlePageChange(page: number) {
-    setCurrentPage(page);
-    fetchPage(page, searchTerm);
-  }
+    console.log("Phrasebook useEffect triggered - filter:", filter, "page:", currentPage, "search:", searchTerm);
+    fetchPage(currentPage, filter, searchTerm);
+  }, [currentPage, filter, searchTerm, fetchPage]);
 
   return (
     <Box minHeight="100vh">
@@ -91,6 +109,16 @@ export default function PhrasebookPage() {
             </TextField.Slot>
           </TextField.Root>
         </Box>
+
+        <Tabs.Root value={filter} onValueChange={setFilter}>
+          <Tabs.List size="2" mb="5">
+            {["all", "Noun", "Verb", "Adjective", "Adverb", "Pronoun", "Phrase", "Other"].map((tab) => (
+              <Tabs.Trigger key={tab} value={tab} style={{ textTransform: "capitalize" }}>
+                {tab}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+        </Tabs.Root>
 
         {loading ? (
           <Flex justify="center" py="9">
@@ -130,7 +158,7 @@ export default function PhrasebookPage() {
               currentPage={currentPage}
               totalItems={totalCount}
               itemsPerPage={ITEMS_PER_PAGE}
-              onPageChange={handlePageChange}
+              onPageChange={goToPage}
               loading={loading}
             />
           </>

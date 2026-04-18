@@ -98,7 +98,7 @@ function buildFilterQuery(
     if (value) {
       if (value.includes("*")) {
         const prefix = value.replace(/\*/g, "");
-        if (prefix && !hasRangeQuery) {
+        if (prefix) {
           if (searchableFields.includes(field)) {
             const lowerPrefix = prefix.toLowerCase();
             query = query
@@ -111,7 +111,7 @@ function buildFilterQuery(
           }
           hasRangeQuery = true;
         }
-      } else if (!hasRangeQuery) {
+      } else {
         query = query.where(field, "==", value);
       }
     }
@@ -134,13 +134,13 @@ function buildCountQuery(
     if (value) {
       if (value.includes("*")) {
         const prefix = value.replace(/\*/g, "");
-        if (prefix && !hasRangeQuery) {
+        if (prefix) {
           if (searchField) {
             query = query.where(searchField, ">=", prefix.toLowerCase()).where(searchField, "<=", prefix.toLowerCase() + "\uf8ff");
           }
           hasRangeQuery = true;
         }
-      } else if (!hasRangeQuery) {
+      } else {
         query = query.where(field, "==", value);
       }
     }
@@ -174,7 +174,8 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     limit: number,
     offset: number,
   ) {
-    const params = new URLSearchParams(filterParams);
+    const paramsObj = JSON.parse(filterParams) as Record<string, string>;
+    const params = new URLSearchParams(paramsObj);
     const queryObj = buildFilterQuery(collectionName, filterableFields, params, searchableFields);
     let query = queryObj.query;
     const searchField = queryObj.searchField;

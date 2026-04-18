@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Tabs, Flex, Heading, Text, Button, Card, Badge, Spinner, Container, Box, TextField } from "@radix-ui/themes";
@@ -8,6 +8,7 @@ import { fetchAPI } from "@/lib/fetch-api";
 import { Pagination } from "@/components/Pagination";
 import { AudioPlayButton } from "@/components/AudioPlayButton";
 import { Search } from "lucide-react";
+import { usePagination } from "@/hooks/usePagination";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -25,28 +26,46 @@ export default function DictionaryPage() {
   const { user, hasPermission } = useAuth();
   const [items, setItems] = useState<DictionaryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
+  const { currentPage, goToPage } = usePagination({
+    storageKey: "pagination:dictionary",
+  });
 
-  const fetchPage = useCallback(async (page: number, filter: string, search: string) => {
+  const prevFilterRef = useRef(filter);
+  const prevSearchRef = useRef(searchTerm);
+
+  useEffect(() => {
+    const filterChanged = prevFilterRef.current !== filter;
+    const searchChanged = prevSearchRef.current !== searchTerm;
+    prevFilterRef.current = filter;
+    prevSearchRef.current = searchTerm;
+
+    if (filterChanged || searchChanged) {
+      goToPage(1);
+    }
+  }, [filter, searchTerm, goToPage]);
+
+  const fetchPage = useCallback(async (page: number, filterVal: string, searchVal: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
         limit: String(ITEMS_PER_PAGE),
         page: String(page),
       });
-      if (filter !== "all") {
-        params.set("partOfSpeech", filter);
+      if (filterVal !== "all") {
+        params.set("partOfSpeech", filterVal);
       }
-      if (search) {
-        params.set("ilokanoWord", search.replace(/\*/g, "") + "*");
+      if (searchVal) {
+        params.set("ilokanoWord", searchVal.replace(/\*/g, "") + "*");
       }
 
+      console.log("Fetching dictionary with params:", params.toString());
       const result = await fetchAPI(`/api/v1/dictionary?${params}`);
+      console.log("Dictionary result:", result.data?.length, "items, totalCount:", result.totalCount);
       setItems(result.data || []);
       setHasMore(result.hasMore || false);
       setTotalCount(result.totalCount || 0);
@@ -58,14 +77,9 @@ export default function DictionaryPage() {
   }, []);
 
   useEffect(() => {
-    setCurrentPage(1);
-    fetchPage(1, filter, searchTerm);
-  }, [filter, fetchPage, searchTerm]);
-
-  function handlePageChange(page: number) {
-    setCurrentPage(page);
-    fetchPage(page, filter, searchTerm);
-  }
+    console.log("useEffect triggered - filter:", filter, "page:", currentPage, "search:", searchTerm);
+    fetchPage(currentPage, filter, searchTerm);
+  }, [currentPage, filter, searchTerm, fetchPage]);
 
   return (
     <Box minHeight="100vh">
@@ -147,7 +161,7 @@ export default function DictionaryPage() {
               currentPage={currentPage}
               totalItems={totalCount}
               itemsPerPage={ITEMS_PER_PAGE}
-              onPageChange={handlePageChange}
+              onPageChange={goToPage}
               loading={loading}
             />
           </>

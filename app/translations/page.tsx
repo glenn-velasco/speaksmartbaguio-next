@@ -7,6 +7,7 @@ import { fetchAPI } from "@/lib/fetch-api";
 import { Flex, Heading, Text, Button, Card, Spinner, Container, Box, TextField, Separator } from "@radix-ui/themes";
 import { Pagination } from "@/components/Pagination";
 import { Search } from "lucide-react";
+import { usePagination } from "@/hooks/usePagination";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -21,21 +22,23 @@ export default function TranslationsPage() {
   const { user, hasPermission } = useAuth();
   const [items, setItems] = useState<TranslationItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-
-  const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const fetchPage = useCallback(async (page: number) => {
+  const { currentPage, goToPage } = usePagination({
+    storageKey: "pagination:translations",
+  });
+
+  const fetchPage = useCallback(async (page: number, searchVal: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
         limit: String(ITEMS_PER_PAGE),
         page: String(page),
       });
-      if (searchTerm) {
-        params.set("ilokano", searchTerm.replace(/\*/g, "") + "*");
+      if (searchVal) {
+        params.set("ilokano", searchVal.replace(/\*/g, "") + "*");
       }
 
       const result = await fetchAPI(`/api/v1/translations?${params}`);
@@ -47,17 +50,11 @@ export default function TranslationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm]);
+  }, []);
 
   useEffect(() => {
-    setCurrentPage(1);
-    fetchPage(1);
-  }, [fetchPage, searchTerm]);
-
-  function handlePageChange(page: number) {
-    setCurrentPage(page);
-    fetchPage(page);
-  }
+    fetchPage(currentPage, searchTerm);
+  }, [currentPage, searchTerm, fetchPage]);
 
   return (
     <Box minHeight="100vh">
@@ -129,7 +126,7 @@ export default function TranslationsPage() {
               currentPage={currentPage}
               totalItems={totalCount}
               itemsPerPage={ITEMS_PER_PAGE}
-              onPageChange={handlePageChange}
+              onPageChange={goToPage}
               loading={loading}
             />
           </>
