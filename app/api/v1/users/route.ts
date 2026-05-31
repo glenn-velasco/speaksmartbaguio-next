@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
             createdAt: authUser.metadata.creationTime,
             lastSignIn: authUser.metadata.lastSignInTime,
           };
-        } catch (error) {
+        } catch {
           logger.warn("User not found in Firebase Auth", { uid: user.uid });
           return user;
         }

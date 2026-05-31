@@ -45,28 +45,9 @@ export default function LoginPage() {
       });
 
       router.push("/");
-    } catch (err: any) {
-      setError(err.message || "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleGoogleLogin() {
-    setError("");
-    setLoading(true);
-
-    try {
-      const user = await loginWithGoogle();
-      await createUserProfile({
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-      });
-      router.push("/");
-    } catch (err: any) {
-      setError(err.message || "An error occurred");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An error occurred";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -133,7 +114,7 @@ export default function LoginPage() {
         </Flex>
 
         <Button
-          onClick={handleGoogleLogin}
+          onClick={loginWithGoogle}
           disabled={loading}
           variant="outline"
           size="3"

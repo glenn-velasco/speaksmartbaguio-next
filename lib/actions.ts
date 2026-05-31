@@ -2,27 +2,174 @@
 
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { requireAuth, requireAdmin, AuthenticatedUser, verifyToken, invalidatePermissionsCache } from "@/lib/auth-server";
+import { AuthenticatedUser, verifyToken, invalidatePermissionsCache } from "@/lib/auth-server";
 import { setUserRole } from "@/lib/admin-roles";
 import { UserRole } from "@/lib/user-roles";
 import { generateSearchFields } from "./search-utils";
+import { logger } from "@/lib/logger";
 
 export type SubmissionAction = "create" | "update" | "delete";
 export type CollectionType = "dictionary" | "phrasebook" | "translations" | "roles";
 
-const SEARCHABLE_FIELDS: Record<string, string[]> = {
-  dictionary: ["ilokanoWord", "englishTranslation", "tagalogTranslation"],
-  phrasebook: ["ilokanoWord", "englishTranslation", "tagalogTranslation"],
-  translations: ["ilokano", "english", "tagalog"],
+const COLLECTION_CONFIG: Record<CollectionType, {
+  uniqueField?: string;
+  searchableFields: string[];
+}> = {
+  dictionary: {
+    uniqueField: "ilokanoWord",
+    searchableFields: ["ilokanoWord", "englishTranslation", "tagalogTranslation"],
+  },
+  phrasebook: {
+    uniqueField: "ilokanoWord",
+    searchableFields: ["ilokanoWord", "englishTranslation", "tagalogTranslation"],
+  },
+  translations: {
+    uniqueField: "ilokano",
+    searchableFields: ["ilokano", "english", "tagalog"],
+  },
+  roles: {
+    uniqueField: undefined,
+    searchableFields: [],
+  },
 };
+
+const MAX_BATCH_SIZE = 500;
 export type SubmissionStatus = "pending" | "approved" | "rejected";
 
 export interface SubmissionData {
   collection: CollectionType;
   action: SubmissionAction;
   targetId?: string;
-  data: any;
+  data: Record<string, unknown>;
   reason?: string;
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  ilokanoWord: "Ilokano word",
+  englishTranslation: "English translation",
+  tagalogTranslation: "Tagalog translation",
+  partOfSpeech: "Part of speech",
+  category: "Category",
+  tts_url: "TTS audio URL",
+  english: "English",
+  ilokano: "Ilokano",
+  tagalog: "Tagalog",
+  role: "Role",
+};
+
+function cleanAuditData(data?: Record<string, unknown> | null): Record<string, unknown> {
+  if (!data) return {};
+
+  return Object.fromEntries(
+    Object.entries(data).filter(([key, value]) => (
+      !key.startsWith("_") &&
+      value !== undefined &&
+      typeof value !== "function"
+    ))
+  );
+}
+
+function formatAuditValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "(empty)";
+  if (Array.isArray(value)) return value.map(formatAuditValue).join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function quoteAuditValue(value: unknown): string {
+  const formatted = formatAuditValue(value);
+  return formatted === "(empty)" ? formatted : `"${formatted}"`;
+}
+
+function getAuditItemName(data?: Record<string, unknown> | null): string {
+  const source = cleanAuditData(data);
+  const value = source.ilokanoWord || source.ilokano || source.english || source.englishTranslation || source.role;
+  return value ? `"${formatAuditValue(value)}"` : "item";
+}
+
+function formatAuditFields(data?: Record<string, unknown> | null): string[] {
+  const clean = cleanAuditData(data);
+  return Object.entries(clean).map(([key, value]) => {
+    const label = FIELD_LABELS[key] || key;
+    return `${label}: ${formatAuditValue(value)}`;
+  });
+}
+
+function buildAuditText(args: {
+  collection: CollectionType;
+  action: SubmissionAction;
+  beforeData?: Record<string, unknown> | null;
+  afterData?: Record<string, unknown> | null;
+}): string {
+  const collectionLabel = args.collection.charAt(0).toUpperCase() + args.collection.slice(1);
+  const beforeData = cleanAuditData(args.beforeData);
+  const afterData = cleanAuditData(args.afterData);
+
+  if (args.action === "delete") {
+    return [
+      `Deleted ${getAuditItemName(beforeData)} from ${collectionLabel}.`,
+      "Deleted item details:",
+      ...formatAuditFields(beforeData).map((line) => `- ${line}`),
+    ].join("\n");
+  }
+
+  if (args.action === "create") {
+    return [
+      `Created ${getAuditItemName(afterData)} in ${collectionLabel}.`,
+      "Created data:",
+      ...formatAuditFields(afterData).map((line) => `- ${line}`),
+    ].join("\n");
+  }
+
+  const changedLines = Object.keys({ ...beforeData, ...afterData })
+    .filter((key) => !key.startsWith("_"))
+    .filter((key) => formatAuditValue(beforeData[key]) !== formatAuditValue(afterData[key]))
+    .map((key) => {
+      const label = FIELD_LABELS[key] || key;
+      return `- ${label} changed from ${quoteAuditValue(beforeData[key])} to ${quoteAuditValue(afterData[key])}`;
+    });
+
+  return [
+    `Updated ${getAuditItemName(afterData) || getAuditItemName(beforeData)} in ${collectionLabel}.`,
+    changedLines.length > 0 ? "Changed fields:" : "Changed fields: none",
+    ...changedLines,
+  ].join("\n");
+}
+
+async function getExistingSubmissionTarget(submission: SubmissionData): Promise<Record<string, unknown> | null> {
+  if (!submission.targetId || submission.action === "create") return null;
+  if (submission.collection === "roles") {
+    const user = await adminAuth.getUser(submission.targetId);
+    const role = (user.customClaims as { role?: UserRole } | undefined)?.role || "viewer";
+    return {
+      email: user.email || "",
+      displayName: user.displayName || "",
+      role,
+    };
+  }
+
+  const doc = await adminDb.collection(submission.collection).doc(submission.targetId).get();
+  return doc.exists ? cleanAuditData(doc.data() as Record<string, unknown>) : null;
+}
+
+async function enrichSubmissionForAudit(submission: SubmissionData) {
+  const beforeData = await getExistingSubmissionTarget(submission);
+  const afterData = submission.action === "delete"
+    ? beforeData || cleanAuditData(submission.data)
+    : cleanAuditData(submission.data);
+
+  return {
+    ...submission,
+    data: afterData,
+    beforeData,
+    afterData,
+    auditText: buildAuditText({
+      collection: submission.collection,
+      action: submission.action,
+      beforeData,
+      afterData,
+    }),
+  };
 }
 
 /**
@@ -91,8 +238,9 @@ export async function updateRolePermissions(role: string, permissions: Permissio
 
     revalidatePath("/dashboard");
     return { success: true, message: `Permissions for ${role} updated successfully` };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to update permissions" };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to update permissions";
+    return { success: false, error: message };
   }
 }
 
@@ -105,8 +253,9 @@ export async function createSubmission(submission: SubmissionData, authToken: st
       return { success: false, error: "Authentication required. Please log in." };
     }
 
+    const auditSubmission = await enrichSubmissionForAudit(submission);
     const submissionData = {
-      ...submission,
+      ...auditSubmission,
       userId: user.uid,
       userEmail: user.email,
       userName: user.displayName,
@@ -122,8 +271,9 @@ export async function createSubmission(submission: SubmissionData, authToken: st
 
     revalidatePath("/dashboard");
     return { success: true, id: docRef.id, message: "Submission created successfully" };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to create submission" };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to create submission";
+    return { success: false, error: message };
   }
 }
 
@@ -143,8 +293,9 @@ export async function createAndAutoApproveSubmission(submission: SubmissionData,
       return { success: false, error: "Admin privileges required." };
     }
 
+    const auditSubmission = await enrichSubmissionForAudit(submission);
     const submissionData = {
-      ...submission,
+      ...auditSubmission,
       userId: user.uid,
       userEmail: user.email,
       userName: user.displayName,
@@ -175,70 +326,230 @@ export async function createAndAutoApproveSubmission(submission: SubmissionData,
 
     }
     return { success: true, id: docRef.id, itemId: itemId || undefined, message: "Changes saved successfully" };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to save changes" };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to save changes";
+    return { success: false, error: message };
+  }
+}
+
+interface UniquenessCheckResult {
+  ok: boolean;
+  error?: string;
+  duplicateField?: string;
+  duplicateValue?: string;
+}
+
+async function checkBatchUniqueness(
+  collection: CollectionType,
+  items: Record<string, unknown>[],
+  options?: { checkPendingSubmissions?: boolean }
+): Promise<UniquenessCheckResult> {
+  const config = COLLECTION_CONFIG[collection];
+  if (!config?.uniqueField) return { ok: true };
+
+  const uniqueValues = items.map((item) => item[config.uniqueField!]).filter(Boolean) as string[];
+  if (uniqueValues.length === 0) return { ok: true };
+
+  const normalizedValues = uniqueValues.map((v) => v.trim().toLowerCase());
+  const uniqueBatchValues = new Set(normalizedValues);
+  if (uniqueBatchValues.size !== normalizedValues.length) {
+    const duplicates = uniqueValues.filter((value, index) => normalizedValues.indexOf(normalizedValues[index]) !== index);
+    return { ok: false, error: `Duplicate ${config.uniqueField} within batch: "${duplicates[0]}"`, duplicateField: config.uniqueField!, duplicateValue: duplicates[0] };
+  }
+
+  const existingValues = new Set<string>();
+  const FIRESTORE_IN_LIMIT = 30;
+
+  for (let i = 0; i < normalizedValues.length; i += FIRESTORE_IN_LIMIT) {
+    const chunk = normalizedValues.slice(i, i + FIRESTORE_IN_LIMIT);
+    const existingDocs = await adminDb.collection(collection).where(config.uniqueField, "in", chunk).get();
+    for (const doc of existingDocs.docs) {
+      existingValues.add(doc.get(config.uniqueField!).trim().toLowerCase());
+    }
+  }
+
+  if (options?.checkPendingSubmissions) {
+    const pendingDocs = await adminDb
+      .collection("submissions")
+      .where("collection", "==", collection)
+      .where("status", "==", "pending")
+      .get();
+    for (const doc of pendingDocs.docs) {
+      const fieldValue = doc.data().data?.[config.uniqueField!];
+      if (fieldValue) {
+        existingValues.add((fieldValue as string).trim().toLowerCase());
+      }
+    }
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    const fieldValue = (items[i][config.uniqueField!] as string || "").trim().toLowerCase();
+    if (fieldValue && existingValues.has(fieldValue)) {
+      return { ok: false, error: `Duplicate ${config.uniqueField}: "${uniqueValues[i]}" already exists`, duplicateField: config.uniqueField!, duplicateValue: uniqueValues[i] };
+    }
+  }
+
+  return { ok: true };
+}
+
+export async function batchDirectCreateAction(
+  collection: CollectionType,
+  items: Record<string, unknown>[],
+  authToken: string
+): Promise<{ success: boolean; createdIds: string[]; count: number; message: string; error?: string; duplicateField?: string; duplicateValue?: string }> {
+  try {
+    const user = await getAuthenticatedUser(authToken);
+    if (!user) {
+      return { success: false, createdIds: [], count: 0, error: "Authentication required", message: "Authentication required" };
+    }
+    if (user.role !== "admin") {
+      return { success: false, createdIds: [], count: 0, error: "Admin privileges required", message: "Admin privileges required" };
+    }
+
+    if (!items || items.length === 0) {
+      return { success: false, createdIds: [], count: 0, error: "No items provided", message: "No items provided" };
+    }
+
+    if (items.length > MAX_BATCH_SIZE) {
+      return { success: false, createdIds: [], count: 0, error: `Maximum ${MAX_BATCH_SIZE} items per batch`, message: `Maximum ${MAX_BATCH_SIZE} items per batch` };
+    }
+
+    const config = COLLECTION_CONFIG[collection];
+    if (!config) {
+      return { success: false, createdIds: [], count: 0, error: "Invalid collection", message: "Invalid collection" };
+    }
+
+    const uniqueness = await checkBatchUniqueness(collection, items);
+    if (!uniqueness.ok) {
+      return { success: false, createdIds: [], count: 0, error: uniqueness.error!, message: uniqueness.error!, duplicateField: uniqueness.duplicateField, duplicateValue: uniqueness.duplicateValue };
+    }
+
+    const batch = adminDb.batch();
+    const createdIds: string[] = [];
+
+    for (const item of items) {
+      const docData = { ...item };
+      if (config.searchableFields.length > 0) {
+        docData._search = generateSearchFields(docData as Record<string, unknown>, config.searchableFields);
+      }
+
+      const docRef = adminDb.collection(collection).doc();
+      batch.create(docRef, docData);
+      createdIds.push(docRef.id);
+    }
+
+    await batch.commit();
+
+    const auditBatch = adminDb.batch();
+    for (let i = 0; i < createdIds.length; i++) {
+      const afterData = cleanAuditData(items[i]);
+      const submissionData = {
+        collection,
+        action: "create" as SubmissionAction,
+        targetId: createdIds[i],
+        data: afterData,
+        beforeData: null,
+        afterData,
+        auditText: buildAuditText({
+          collection,
+          action: "create",
+          afterData,
+        }),
+        userId: user.uid,
+        userEmail: user.email,
+        userName: user.displayName,
+        status: "approved" as SubmissionStatus,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        adminNote: "Auto-approved (admin direct create)",
+        reviewedBy: user.uid,
+        reviewedByEmail: user.email,
+        reviewedByName: user.displayName,
+        reviewedAt: new Date().toISOString(),
+      };
+      const submissionRef = adminDb.collection("submissions").doc();
+      auditBatch.set(submissionRef, submissionData);
+    }
+    await auditBatch.commit();
+
+    revalidateTag(collection, 'max');
+    revalidatePath(`/${collection}`);
+
+    return { success: true, createdIds, count: createdIds.length, message: `${createdIds.length} ${collection} entries created successfully` };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : `Failed to batch create ${collection} entries`;
+    return { success: false, createdIds: [], count: 0, error: message, message };
   }
 }
 
 /**
- * Direct CRUD operations for admins (no approval workflow)
- * Admins can create, update, and delete items directly
+ * Batch create pending submissions for non-admin users.
+ * Each item becomes a separate pending submission for admin review.
+ * Uses Firestore batch for atomic writes.
  */
-export async function directCrudAction(
+export async function batchCreateSubmissions(
   collection: CollectionType,
-  action: "create" | "update" | "delete",
-  data: any,
-  targetId?: string,
-  authToken?: string
-): Promise<{ success: boolean; id?: string; message: string; error?: string }> {
+  items: Record<string, unknown>[],
+  authToken: string
+): Promise<{ success: boolean; createdIds: string[]; count: number; message: string; error?: string; duplicateField?: string; duplicateValue?: string }> {
   try {
-    if (authToken) {
-      const user = await getAuthenticatedUser(authToken);
-      if (!user) {
-        return { success: false, error: "Authentication required", message: "Authentication required" };
-      }
-      if (user.role !== "admin") {
-        return { success: false, error: "Admin privileges required", message: "Admin privileges required" };
-      }
+    const user = await getAuthenticatedUser(authToken);
+    if (!user) {
+      return { success: false, createdIds: [], count: 0, error: "Authentication required. Please log in.", message: "Authentication required. Please log in." };
     }
 
-    const searchableFields = SEARCHABLE_FIELDS[collection] || [];
-    const updateData = { ...data };
-    if (searchableFields.length > 0 && action !== "delete") {
-      updateData._search = generateSearchFields(updateData, searchableFields);
+    if (!items || items.length === 0) {
+      return { success: false, createdIds: [], count: 0, error: "No items provided", message: "No items provided" };
     }
 
-    switch (action) {
-      case "create": {
-        const docRef = await adminDb.collection(collection).add(updateData);
-        revalidatePath(`/${collection}`);
-        revalidatePath(`/${collection}/new`);
-        return { success: true, id: docRef.id, message: `${collection} entry created successfully` };
-      }
-      case "update": {
-        if (!targetId) {
-          return { success: false, error: "Target ID required for update", message: "Target ID required for update" };
-        }
-        await adminDb.collection(collection).doc(targetId).update(updateData);
-        revalidatePath(`/${collection}`);
-        revalidatePath(`/${collection}/${targetId}`);
-        revalidatePath(`/${collection}/${targetId}/edit`);
-        return { success: true, message: `${collection} entry updated successfully` };
-      }
-      case "delete": {
-        if (!targetId) {
-          return { success: false, error: "Target ID required for delete", message: "Target ID required for delete" };
-        }
-        await adminDb.collection(collection).doc(targetId).delete();
-        revalidatePath(`/${collection}`);
-        revalidatePath(`/${collection}/${targetId}`);
-        return { success: true, message: `${collection} entry deleted successfully` };
-      }
-      default:
-        return { success: false, error: "Invalid action", message: "Invalid action" };
+    if (items.length > MAX_BATCH_SIZE) {
+      return { success: false, createdIds: [], count: 0, error: `Maximum ${MAX_BATCH_SIZE} items per batch`, message: `Maximum ${MAX_BATCH_SIZE} items per batch` };
     }
-  } catch (error: any) {
-    return { success: false, error: error.message || `Failed to ${action} ${collection} entry`, message: error.message || `Failed to ${action} ${collection} entry` };
+
+    const uniqueness = await checkBatchUniqueness(collection, items, { checkPendingSubmissions: true });
+    if (!uniqueness.ok) {
+      return { success: false, createdIds: [], count: 0, error: uniqueness.error!, message: uniqueness.error!, duplicateField: uniqueness.duplicateField, duplicateValue: uniqueness.duplicateValue };
+    }
+
+    const batch = adminDb.batch();
+    const createdIds: string[] = [];
+
+    for (const item of items) {
+      const afterData = cleanAuditData(item);
+      const submissionData = {
+        collection,
+        action: "create" as SubmissionAction,
+        data: afterData,
+        beforeData: null,
+        afterData,
+        auditText: buildAuditText({
+          collection,
+          action: "create",
+          afterData,
+        }),
+        userId: user.uid,
+        userEmail: user.email,
+        userName: user.displayName,
+        status: "pending" as SubmissionStatus,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        adminNote: null,
+        reviewedBy: null,
+        reviewedAt: null,
+      };
+
+      const docRef = adminDb.collection("submissions").doc();
+      batch.set(docRef, submissionData);
+      createdIds.push(docRef.id);
+    }
+
+    await batch.commit();
+
+    revalidatePath("/dashboard");
+    return { success: true, createdIds, count: createdIds.length, message: `${createdIds.length} submissions created for admin review` };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : `Failed to create ${collection} submissions`;
+    return { success: false, createdIds: [], count: 0, error: message, message };
   }
 }
 
@@ -260,7 +571,7 @@ export async function getSubmissions(status?: SubmissionStatus, collection?: Col
       id: doc.id,
       ...doc.data(),
     }));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to get submissions:", error);
     return [];
   }
@@ -303,7 +614,7 @@ export async function reviewSubmission(id: string, action: "approve" | "reject",
     if (action === "approve") {
       try {
         
-        const itemId = await applySubmission(submission);
+        const itemId = await applySubmission(submission as unknown as AppliedSubmission);
         
         revalidateTag(submission.collection, 'max');
 
@@ -328,21 +639,23 @@ export async function reviewSubmission(id: string, action: "approve" | "reject",
           action: submission.action,
           targetId: submission.targetId
         };
-      } catch (applyError: any) {
-
-        return { success: false, error: "Failed to apply submission: " + applyError.message };
+      } catch (applyError: unknown) {
+        const message = applyError instanceof Error ? applyError.message : "Unknown error";
+        return { success: false, error: "Failed to apply submission: " + message };
       }
     }
 
     revalidatePath("/dashboard");
     return { success: true, message: "Submission rejected successfully" };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to review submission" };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to review submission";
+    return { success: false, error: message };
   }
 }
 
 export async function getDictionaryItems(partOfSpeech?: string) {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let query: any = adminDb.collection("dictionary");
     
     if (partOfSpeech && partOfSpeech !== "all") {
@@ -351,6 +664,7 @@ export async function getDictionaryItems(partOfSpeech?: string) {
 
     const snapshot = await query.limit(100).get();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
@@ -409,24 +723,32 @@ export async function getItemById(collection: string, id: string) {
   return getDocumentById(collection, id);
 }
 
-async function applySubmission(submission: any): Promise<string | null> {
+interface AppliedSubmission {
+  collection: CollectionType;
+  action: SubmissionAction;
+  targetId?: string;
+  data: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+async function applySubmission(submission: AppliedSubmission): Promise<string | null> {
   const { collection, action, targetId, data } = submission;
 
   if (collection === "roles" && action === "update") {
     if (targetId && data.role) {
-      await setUserRole(targetId, data.role);
+      await setUserRole(targetId, data.role as UserRole);
       try {
         await adminDb.collection("users").doc(targetId).update({ role: data.role });
-      } catch (e) {
+      } catch {
 
       }
     }
-    return targetId;
+    return targetId || null;
   }
 
   let itemId: string | null = null;
-  const searchableFields = SEARCHABLE_FIELDS[collection as keyof typeof SEARCHABLE_FIELDS] || [];
-  const applyData = { ...data };
+  const searchableFields = COLLECTION_CONFIG[collection]?.searchableFields || [];
+  const applyData: Record<string, unknown> = { ...data };
   if (searchableFields.length > 0 && action !== "delete") {
     applyData._search = generateSearchFields(applyData, searchableFields);
   }
@@ -446,7 +768,15 @@ async function applySubmission(submission: any): Promise<string | null> {
     }
     case "delete": {
       if (targetId) {
-        await adminDb.collection(collection).doc(targetId).delete();
+        const docRef = adminDb.collection(collection).doc(targetId);
+        const docSnap = await docRef.get();
+        if (docSnap.exists) {
+          logger.info("Deleting document", {
+            collection,
+            data: docSnap.data(),
+          });
+        }
+        await docRef.delete();
       }
       break;
     }
@@ -466,7 +796,15 @@ export async function getAllUsers(options?: {
   cursor?: string;
 }) {
   try {
-    const allUsers: any[] = [];
+    const allUsers: Array<{
+      uid: string;
+      email: string | undefined;
+      displayName: string | undefined;
+      photoURL: string | undefined;
+      emailVerified: boolean | undefined;
+      createdAt: string | undefined;
+      lastSignIn: string | undefined;
+    }> = [];
     let pageToken: string | undefined;
 
     do {
@@ -511,9 +849,10 @@ export async function getAllUsers(options?: {
     }
 
     return users;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to get users:", error);
-    throw new Error(`Failed to get users: ${error.message}`);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    throw new Error(`Failed to get users: ${message}`);
   }
 }
 
@@ -553,7 +892,7 @@ export async function updateUserRoleDirect(
         { role: newRole, updatedAt: new Date().toISOString() },
         { merge: true }
       );
-    } catch (e) {
+    } catch {
     }
 
     revalidatePath("/dashboard");
@@ -565,8 +904,9 @@ export async function updateUserRoleDirect(
       uid: targetUserId,
       role: newRole,
     };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to update user role" };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to update user role";
+    return { success: false, error: message };
   }
 }
 
@@ -600,7 +940,7 @@ export async function deleteUserAccount(targetUserId: string, authToken: string)
 
     try {
       await adminDb.collection("users").doc(targetUserId).delete();
-    } catch (e) {
+    } catch {
     }
 
     revalidatePath("/dashboard");
@@ -611,8 +951,9 @@ export async function deleteUserAccount(targetUserId: string, authToken: string)
       message: "User deleted successfully",
       uid: targetUserId,
     };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to delete user" };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to delete user";
+    return { success: false, error: message };
   }
 }
 
@@ -647,7 +988,7 @@ export async function getRoleRequests(status?: SubmissionStatus) {
       id: doc.id,
       ...doc.data(),
     }));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to get role requests:", error);
     return [];
   }

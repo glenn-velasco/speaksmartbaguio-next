@@ -5,8 +5,17 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { createSubmission, getItemById } from "@/lib/actions";
-import { AlertDialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, Spinner, DataList } from "@radix-ui/themes";
+import { AlertDialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, Spinner, DataList, Callout } from "@radix-ui/themes";
 import { AudioPlayButton } from "@/components/AudioPlayButton";
+import { Check, AlertCircle } from "lucide-react";
+
+interface PhrasebookItem {
+  ilokanoWord: string;
+  englishTranslation: string;
+  tagalogTranslation: string;
+  partOfSpeech: string;
+  tts_url?: string;
+}
 
 export default function PhrasebookDetailPage() {
   const { user, hasPermission } = useAuth();
@@ -14,15 +23,17 @@ export default function PhrasebookDetailPage() {
   const params = useParams();
   const id = params.id as string;
 
-  const [item, setItem] = useState<any>(null);
+  const [item, setItem] = useState<PhrasebookItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     async function fetchItem() {
       try {
         const found = await getItemById("phrasebook", id);
-        setItem(found || null);
+        setItem(found as unknown as PhrasebookItem || null);
       } catch (error) {
         console.error("Failed to fetch phrase:", error);
       } finally {
@@ -34,19 +45,28 @@ export default function PhrasebookDetailPage() {
   }, [id]);
 
   async function handleDelete() {
-    if (!user) return;
+    if (!user || !item) return;
 
     setActionLoading(true);
+    setError("");
     const token = await user.getIdToken();
-    await createSubmission({
+    const result = await createSubmission({
       collection: "phrasebook",
       action: "delete",
       targetId: id,
-      data: {},
+      data: { ...item },
       reason: "User requested deletion",
     }, token);
     setActionLoading(false);
-    router.push("/phrasebook");
+
+    if (result.success) {
+      setSuccess(true);
+      setTimeout(() => {
+        router.push("/phrasebook");
+      }, 2000);
+    } else {
+      setError(result.error || "Failed to submit deletion request");
+    }
   }
 
   if (loading) {
@@ -70,6 +90,18 @@ export default function PhrasebookDetailPage() {
     );
   }
 
+  if (success) {
+    return (
+      <Flex minHeight="100vh" align="center" justify="center">
+        <Flex direction="column" align="center" gap="3">
+          <Check className="w-12 h-12" style={{ color: "var(--green-9)" }} />
+          <Heading size="5" highContrast>Deletion Request Submitted</Heading>
+          <Text color="gray">An admin will review before the item is removed.</Text>
+        </Flex>
+      </Flex>
+    );
+  }
+
   return (
     <Box minHeight="100vh">
       <Container size="3" px="4" py="6">
@@ -78,6 +110,13 @@ export default function PhrasebookDetailPage() {
             <Link href="/phrasebook">← Back to Phrasebook</Link>
           </Button>
         </Box>
+
+        {error && (
+          <Callout.Root color="red" size="2" mb="4">
+            <Callout.Icon><AlertCircle className="w-4 h-4" /></Callout.Icon>
+            <Callout.Text>{error}</Callout.Text>
+          </Callout.Root>
+        )}
 
         <Card size="4">
           <Flex justify="between" align="start" mb="5">

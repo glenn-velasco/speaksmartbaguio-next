@@ -36,13 +36,14 @@ export default function EditDictionaryPage() {
         const item = await getDocumentById("dictionary", id);
 
         if (item) {
+          const d = item as Record<string, unknown>;
           setFormData({
-            ilokanoWord: (item as any).ilokanoWord || "",
-            englishTranslation: (item as any).englishTranslation || "",
-            tagalogTranslation: (item as any).tagalogTranslation || "",
-            partOfSpeech: (item as any).partOfSpeech || "noun",
-            category: (item as any).category || "",
-            tts_url: (item as any).tts_url || "",
+            ilokanoWord: (d.ilokanoWord as string) || "",
+            englishTranslation: (d.englishTranslation as string) || "",
+            tagalogTranslation: (d.tagalogTranslation as string) || "",
+            partOfSpeech: (d.partOfSpeech as string) || "noun",
+            category: (d.category as string) || "",
+            tts_url: (d.tts_url as string) || "",
           });
         }
       } catch (error) {

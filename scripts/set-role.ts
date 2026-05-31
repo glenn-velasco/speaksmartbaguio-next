@@ -40,8 +40,9 @@ async function setRole(uid: string, role: UserRole): Promise<void> {
     console.log(`\nRole "${role}" successfully set for user ${user.uid}`);
     console.log(`\nNote: The user will need to sign out and sign back in for the new role to take effect.`);
     console.log(`   (Custom claims are embedded in ID tokens, which are refreshed on login)`);
-  } catch (error: any) {
-    console.error(`Error: ${error.message}`);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Error: ${message}`);
     process.exit(1);
   }
 }

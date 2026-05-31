@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, Badge, Button, Code, Text, Flex, Box } from "@radix-ui/themes";
+import { Card, Badge, Button, Code, Text, Flex } from "@radix-ui/themes";
 
 interface EndpointProps {
   method: string;

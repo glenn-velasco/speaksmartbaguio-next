@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { DropdownMenu, Button, Text, Flex, Spinner } from "@radix-ui/themes";
 import { UserRole } from "@/lib/user-roles";
-import { Shield, User, Edit, Crown, Check } from "lucide-react";
+import { User, Edit, Crown, Check } from "lucide-react";
 
 interface UserRoleDropdownProps {
   currentRole: UserRole;
