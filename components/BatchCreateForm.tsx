@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { batchDirectCreateAction, CollectionType } from "@/lib/actions";
+import { batchDirectCreateAction, batchCreateSubmissions, CollectionType } from "@/lib/actions";
 import { Select, Button, Card, Heading, Text, Flex, Box, Container, Spinner, Callout, TextField } from "@radix-ui/themes";
 import { AlertCircle, Check, Plus, X } from "lucide-react";
 import { AudioUploadInput } from "@/components/AudioUploadInput";
@@ -14,6 +14,7 @@ export interface FormField {
   label: string;
   type: "text" | "select" | "audio";
   required?: boolean;
+  unique?: boolean;
   options?: string[];
   placeholder?: string;
 }
@@ -23,10 +24,11 @@ type FormDataRecord = Record<string, string>;
 interface BatchCreateFormProps {
   collection: CollectionType;
   title: string;
-  description: string;
+  description: string | ((role: string) => string);
   fields: FormField[];
   defaultValues: FormDataRecord;
   successRedirect: string;
+  searchParamMapping?: Record<string, string>;
 }
 
 function generateId() {
@@ -40,14 +42,31 @@ export function BatchCreateForm({
   fields,
   defaultValues,
   successRedirect,
+  searchParamMapping,
 }: BatchCreateFormProps) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const getInitialValues = (): FormDataRecord => {
+    const values = { ...defaultValues };
+    if (searchParamMapping) {
+      for (const [paramName, fieldName] of Object.entries(searchParamMapping)) {
+        const paramValue = searchParams.get(paramName);
+        if (paramValue) {
+          values[fieldName] = paramValue;
+          break;
+        }
+      }
+    }
+    return values;
+  };
 
   const [forms, setForms] = useState<FormDataRecord[]>([
-    { ...defaultValues, _formId: generateId() },
+    { ...getInitialValues(), _formId: generateId() },
   ]);
   const [formErrors, setFormErrors] = useState<Record<string, Record<string, string>>>({});
+  const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -78,6 +97,19 @@ export function BatchCreateForm({
     const newForms = [...forms];
     newForms[index] = { ...newForms[index], [field]: value };
     setForms(newForms);
+
+    const formId = forms[index]._formId;
+    if (serverFieldErrors[formId]?.[field]) {
+      const newServerErrors = { ...serverFieldErrors };
+      const fieldErrors = { ...newServerErrors[formId] };
+      delete fieldErrors[field];
+      if (Object.keys(fieldErrors).length === 0) {
+        delete newServerErrors[formId];
+      } else {
+        newServerErrors[formId] = fieldErrors;
+      }
+      setServerFieldErrors(newServerErrors);
+    }
   };
 
   const handleAudioUploadComplete = (index: number, audioUrl: string) => {
@@ -103,11 +135,39 @@ export function BatchCreateForm({
     return errors;
   };
 
+  const validateBatchDuplicates = (allForms: FormDataRecord[]): Record<string, Record<string, string>> => {
+    const allErrors: Record<string, Record<string, string>> = {};
+    const uniqueFields = fields.filter((f) => f.unique);
+
+    for (const uniqueField of uniqueFields) {
+      const seen = new Map<string, number>();
+      for (let i = 0; i < allForms.length; i++) {
+        const value = (allForms[i][uniqueField.name] || "").trim().toLowerCase();
+        if (!value) continue;
+
+        if (seen.has(value)) {
+          const firstIndex = seen.get(value)!;
+          const firstId = allForms[firstIndex]._formId;
+          if (!allErrors[firstId]) allErrors[firstId] = {};
+          allErrors[firstId][uniqueField.name] = `Duplicate in this batch`;
+          const currentId = allForms[i]._formId;
+          if (!allErrors[currentId]) allErrors[currentId] = {};
+          allErrors[currentId][uniqueField.name] = `Duplicate in this batch`;
+        } else {
+          seen.set(value, i);
+        }
+      }
+    }
+
+    return allErrors;
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
 
     setError("");
+    setServerFieldErrors({});
     const allErrors: Record<string, Record<string, string>> = {};
     let hasErrors = false;
 
@@ -117,6 +177,12 @@ export function BatchCreateForm({
         allErrors[forms[i]._formId] = errors;
         hasErrors = true;
       }
+    }
+
+    const batchDupErrors = validateBatchDuplicates(forms);
+    for (const [formId, fieldErrors] of Object.entries(batchDupErrors)) {
+      allErrors[formId] = { ...(allErrors[formId] || {}), ...fieldErrors };
+      hasErrors = true;
     }
 
     setFormErrors(allErrors);
@@ -133,8 +199,11 @@ export function BatchCreateForm({
       return rest;
     });
     const token = await user.getIdToken();
+    const isAdmin = role === "admin";
 
-    const result = await batchDirectCreateAction(collection, itemsToSubmit, token);
+    const result = isAdmin
+      ? await batchDirectCreateAction(collection, itemsToSubmit, token)
+      : await batchCreateSubmissions(collection, itemsToSubmit, token);
 
     setLoading(false);
 
@@ -145,17 +214,35 @@ export function BatchCreateForm({
         router.push(successRedirect);
       }, 2000);
     } else {
+      if (result.duplicateField && result.duplicateValue) {
+        const dupField = fields.find((f) => f.name === result.duplicateField);
+        const dupValue = result.duplicateValue.toLowerCase();
+        const serverErrors: Record<string, Record<string, string>> = {};
+        for (let i = 0; i < forms.length; i++) {
+          if ((forms[i][result.duplicateField!] || "").trim().toLowerCase() === dupValue) {
+            serverErrors[forms[i]._formId] = {
+              [result.duplicateField!]: `This ${dupField?.label.toLowerCase() || result.duplicateField} already exists`,
+            };
+          }
+        }
+        setServerFieldErrors(serverErrors);
+        setError(`"${result.duplicateValue}" already exists in the database`);
+        return;
+      }
       setError(result.error || "An error occurred");
     }
   }
 
   if (success) {
+    const isAdmin = role === "admin";
     return (
       <Flex minHeight="100vh" align="center" justify="center">
         <Flex direction="column" align="center" gap="3">
           <Check className="w-12 h-12" style={{ color: "var(--green-9)" }} />
           <Heading size="5" highContrast>
-            {createdCount} {collection} entries created!
+            {isAdmin
+              ? `${createdCount} ${collection} entries created!`
+              : `${createdCount} submissions sent for review!`}
           </Heading>
           <Text color="gray">
             Redirecting...
@@ -170,7 +257,7 @@ export function BatchCreateForm({
       <Container size="2" px="4" py="6">
         <Heading size="7" mb="1" highContrast>{title}</Heading>
         <Text color="gray" size="3" as="p" mb="6">
-          {description}
+          {typeof description === "function" ? description(role ?? "") : description}
         </Text>
 
         {error && (
@@ -183,11 +270,21 @@ export function BatchCreateForm({
         <form onSubmit={handleSubmit}>
           <Flex direction="column" gap="4">
             {forms.map((formData, index) => {
-              const errors = formErrors[formData._formId] || {};
+              const errors = { ...(formErrors[formData._formId] || {}), ...(serverFieldErrors[formData._formId] || {}) };
+              const hasErrors = Object.keys(errors).length > 0;
               const hasAudio = formData.tts_url && formData.tts_url !== "";
 
               return (
-                <Card key={formData._formId} size="3">
+                <Flex key={formData._formId} direction="column" gap="2">
+                  {hasErrors && (
+                    <Callout.Root color="red" size="1">
+                      <Callout.Icon><AlertCircle className="w-3 h-3" /></Callout.Icon>
+                      <Callout.Text>
+                        Entry {index + 1}: {Object.values(errors).join(", ")}
+                      </Callout.Text>
+                    </Callout.Root>
+                  )}
+                <Card size="3">
                   <Flex direction="column" gap="4">
                     <Flex justify="between" align="center">
                       <Heading size="4">Entry {index + 1}</Heading>
@@ -278,6 +375,7 @@ export function BatchCreateForm({
                     })}
                   </Flex>
                 </Card>
+                </Flex>
               );
             })}
 

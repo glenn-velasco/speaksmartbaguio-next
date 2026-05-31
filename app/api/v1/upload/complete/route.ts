@@ -76,9 +76,6 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     });
 
-    const updatedDoc = await docRef.get();
-    const updatedItem = { id: itemId, ...updatedDoc.data() };
-
     revalidateTag(collection, 'max');
 
     return successResponse({

@@ -35,12 +35,13 @@ export default function EditPhrasebookPage() {
         const item = await getDocumentById("phrasebook", id);
 
         if (item) {
+          const d = item as Record<string, unknown>;
           setFormData({
-            ilokanoWord: (item as any).ilokanoWord || "",
-            englishTranslation: (item as any).englishTranslation || "",
-            tagalogTranslation: (item as any).tagalogTranslation || "",
-            partOfSpeech: (item as any).partOfSpeech || "Phrase",
-            tts_url: (item as any).tts_url || "",
+            ilokanoWord: (d.ilokanoWord as string) || "",
+            englishTranslation: (d.englishTranslation as string) || "",
+            tagalogTranslation: (d.tagalogTranslation as string) || "",
+            partOfSpeech: (d.partOfSpeech as string) || "Phrase",
+            tts_url: (d.tts_url as string) || "",
           });
         }
       } catch (error) {

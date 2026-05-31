@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Flex, Heading, Text, Button, Callout } from "@radix-ui/themes";
+import { Flex, Heading, Button, Callout } from "@radix-ui/themes";
 import { AlertCircle } from "lucide-react";
 
 export default function Error({

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Box, Text, Flex, Progress, IconButton, Tooltip } from "@radix-ui/themes";
-import { Upload, X, FileAudio, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FileAudio, CheckCircle2, AlertCircle } from "lucide-react";
 import { validateAudioFile, formatFileSize, AudioValidationResult } from "@/lib/audio-validation";
 import { fetchAPI } from "@/lib/fetch-api";
 

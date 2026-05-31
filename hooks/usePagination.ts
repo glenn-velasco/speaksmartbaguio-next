@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 const PAGE_PARAM = "page";
@@ -9,19 +9,6 @@ function getPageFromUrl(searchParams: URLSearchParams): number {
   const raw = searchParams.get(PAGE_PARAM);
   const parsed = raw ? parseInt(raw, 10) : 1;
   return isNaN(parsed) || parsed < 1 ? 1 : parsed;
-}
-
-function getPageFromStorage(key: string): number {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      const parsed = parseInt(raw, 10);
-      if (!isNaN(parsed) && parsed >= 1) return parsed;
-    }
-  } catch {
-    // localStorage may be unavailable
-  }
-  return 1;
 }
 
 function setPageToStorage(key: string, page: number) {
@@ -48,12 +35,10 @@ export function usePagination({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const initialPage = getPageFromUrl(searchParams) || getPageFromStorage(storageKey);
-  const [currentPage, setCurrentPage] = useState(initialPage);
+  const currentPage = getPageFromUrl(searchParams);
 
   const goToPage = useCallback(
     (page: number) => {
-      setCurrentPage(page);
       setPageToStorage(storageKey, page);
       const params = new URLSearchParams(searchParams.toString());
       if (page <= 1) {
@@ -67,24 +52,6 @@ export function usePagination({
     },
     [pathname, router, searchParams, storageKey]
   );
-
-  // Sync currentPage when URL changes (e.g. browser back/forward, or external navigation)
-  useEffect(() => {
-    const pageFromUrl = getPageFromUrl(searchParams);
-    setCurrentPage(pageFromUrl);
-    setPageToStorage(storageKey, pageFromUrl);
-  }, [searchParams, storageKey]);
-
-  // Handle browser back/forward (popstate) — covers cases where Next.js doesn't re-render
-  useEffect(() => {
-    const handlePopState = () => {
-      const pageFromUrl = getPageFromUrl(new URLSearchParams(window.location.search));
-      setCurrentPage(pageFromUrl);
-      setPageToStorage(storageKey, pageFromUrl);
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [storageKey]);
 
   return { currentPage, goToPage };
 }

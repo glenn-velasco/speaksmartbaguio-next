@@ -7,7 +7,7 @@ import { getAllUsers } from "@/lib/actions";
 import { UserRole } from "@/lib/user-roles";
 import { UserManagementPanel } from "@/components/UserManagementPanel";
 import { Box, Container, Heading, Text, Spinner, Flex, Card } from "@radix-ui/themes";
-import { Users, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 interface User {
@@ -46,9 +46,10 @@ export default function UsersDashboardPage() {
         setError(null);
         const usersData = await getAllUsers({ limit: 100 });
         setUsers(usersData as User[]);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Failed to fetch users:", err);
-        setError(err.message || "Failed to load users");
+        const message = err instanceof Error ? err.message : "Failed to load users";
+        setError(message);
       } finally {
         setLoading(false);
       }

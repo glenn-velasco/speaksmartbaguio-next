@@ -10,7 +10,6 @@ import {
   Flex,
   Box,
   Text,
-  Heading,
   TextField,
   Select,
   Button,
@@ -18,10 +17,9 @@ import {
   Avatar,
   Badge,
   Dialog,
-  TextArea,
   Spinner,
 } from "@radix-ui/themes";
-import { Search, Trash2, AlertTriangle, UserX, Mail, Calendar, Shield } from "lucide-react";
+import { Search, Trash2, AlertTriangle, UserX } from "lucide-react";
 
 interface User {
   uid: string;
@@ -87,7 +85,7 @@ export function UserManagementPanel({ initialUsers = [] }: UserManagementPanelPr
       } else {
         setError(result.error || "Failed to update user role");
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred while updating the role");
     } finally {
       setActionLoading(false);
@@ -111,23 +109,10 @@ export function UserManagementPanel({ initialUsers = [] }: UserManagementPanelPr
       } else {
         setError(result.error || "Failed to delete user");
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred while deleting the user");
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  const getRoleBadgeColor = (role: UserRole) => {
-    switch (role) {
-      case "admin":
-        return "red";
-      case "editor":
-        return "blue";
-      case "viewer":
-        return "gray";
-      default:
-        return "gray";
     }
   };
 

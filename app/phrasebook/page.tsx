@@ -22,7 +22,7 @@ interface PhrasebookItem {
 }
 
 export default function PhrasebookPage() {
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const [items, setItems] = useState<PhrasebookItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);

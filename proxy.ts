@@ -67,7 +67,13 @@ setInterval(() => {
  * Verify Firebase ID token and return decoded claims.
  * Returns null if token is invalid or missing.
  */
-async function verifyFirebaseToken(authHeader: string | null): Promise<any | null> {
+interface DecodedToken {
+  uid: string;
+  role?: string;
+  [key: string]: unknown;
+}
+
+async function verifyFirebaseToken(authHeader: string | null): Promise<DecodedToken | null> {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
         return null;
     }
@@ -76,9 +82,11 @@ async function verifyFirebaseToken(authHeader: string | null): Promise<any | nul
 
     try {
         const decodedToken = await adminAuth.verifyIdToken(token);
-        return decodedToken;
-    } catch (error: any) {
-        logger.warn("Firebase token verification failed", { error: error.message });
+        return decodedToken as unknown as DecodedToken;
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Token verification failed";
+        console.error("Token verification error:", message);
+        logger.warn("Firebase token verification failed", { error: message });
         return null;
     }
 }

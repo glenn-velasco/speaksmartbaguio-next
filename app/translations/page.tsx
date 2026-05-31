@@ -19,7 +19,7 @@ interface TranslationItem {
 }
 
 export default function TranslationsPage() {
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const [items, setItems] = useState<TranslationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);

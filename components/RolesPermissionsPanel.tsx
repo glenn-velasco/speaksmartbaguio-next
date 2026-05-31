@@ -38,7 +38,7 @@ export function RolesPermissionsPanel() {
     try {
       const data = await getAllRolePermissions();
       setRolePermissions(data as Record<string, Permission[]>);
-    } catch (err) {
+    } catch {
       setError("Failed to load role permissions");
     } finally {
       setLoading(false);
@@ -73,7 +73,7 @@ export function RolesPermissionsPanel() {
       } else {
         setError(result.error || `Failed to update ${role} permissions`);
       }
-    } catch (err) {
+    } catch {
       setError(`An error occurred while saving ${role} permissions`);
     } finally {
       setSaving(null);
@@ -184,11 +184,10 @@ export function RolesPermissionsPanel() {
   );
 }
 
-function getRoleColor(role: string): any {
+function getRoleColor(role: string): "red" | "blue" | "gray" {
   switch (role) {
     case "admin": return "red";
     case "editor": return "blue";
-    case "viewer": return "gray";
     default: return "gray";
   }
 }

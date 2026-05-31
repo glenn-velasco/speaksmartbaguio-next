@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Book, MessageCircle, Globe } from "lucide-react";
-import { Heading, Text, Button, Card, Flex, Grid, Container, Box, Badge } from "@radix-ui/themes";
+import { Heading, Text, Button, Card, Flex, Grid, Container, Box } from "@radix-ui/themes";
 
 export const metadata: Metadata = {
   title: "Speak Smart Baguio - Ilokano Dictionary & Translations",

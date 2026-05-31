@@ -23,7 +23,7 @@ interface DictionaryItem {
 }
 
 export default function DictionaryPage() {
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const [items, setItems] = useState<DictionaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);

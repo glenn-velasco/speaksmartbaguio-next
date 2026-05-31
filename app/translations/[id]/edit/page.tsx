@@ -31,10 +31,11 @@ export default function EditTranslationPage() {
         const item = await getDocumentById("translations", id);
 
         if (item) {
+          const d = item as Record<string, unknown>;
           setFormData({
-            english: (item as any).english || "",
-            ilokano: (item as any).ilokano || "",
-            tagalog: (item as any).tagalog || "",
+            english: (d.english as string) || "",
+            ilokano: (d.ilokano as string) || "",
+            tagalog: (d.tagalog as string) || "",
           });
         }
       } catch (error) {

@@ -91,7 +91,6 @@ function buildFilterQuery(
 ): { query: FirebaseFirestore.Query; searchField?: string } {
   let query: FirebaseFirestore.Query = adminDb.collection(collection);
   let searchField: string | undefined;
-  let hasRangeQuery = false;
 
   for (const field of filterableFields) {
     const value = searchParams.get(field);
@@ -109,7 +108,6 @@ function buildFilterQuery(
             query = query.where(field, ">=", prefix).where(field, "<=", prefix + "\uf8ff");
             searchField = field;
           }
-          hasRangeQuery = true;
         }
       } else {
         query = query.where(field, "==", value);
@@ -127,7 +125,6 @@ function buildCountQuery(
   searchField?: string,
 ): FirebaseFirestore.Query {
   let query: FirebaseFirestore.Query = adminDb.collection(collection);
-  let hasRangeQuery = false;
 
   for (const field of filterableFields) {
     const value = searchParams.get(field);
@@ -138,7 +135,6 @@ function buildCountQuery(
           if (searchField) {
             query = query.where(searchField, ">=", prefix.toLowerCase()).where(searchField, "<=", prefix.toLowerCase() + "\uf8ff");
           }
-          hasRangeQuery = true;
         }
       } else {
         query = query.where(field, "==", value);

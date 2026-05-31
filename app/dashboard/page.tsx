@@ -3,10 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter, redirect } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { getSubmissions, reviewSubmission, SubmissionStatus, CollectionType, getRoleRequests } from "@/lib/actions";
+import { getSubmissions, reviewSubmission, SubmissionStatus, CollectionType } from "@/lib/actions";
 import { Tabs, Dialog, Button, Card, Heading, Text, Badge, Flex, Box, Container, Spinner, TextArea } from "@radix-ui/themes";
 import { Plus, Pencil, Trash2, Users, UserCheck } from "lucide-react";
-import Link from "next/link";
 import { RoleRequestsPanel } from "@/components/RoleRequestsPanel";
 import { RolesPermissionsPanel } from "@/components/RolesPermissionsPanel";
 import { Shield } from "lucide-react";
@@ -16,7 +15,10 @@ interface Submission {
   collection: CollectionType;
   action: string;
   targetId?: string;
-  data: any;
+  data: Record<string, unknown>;
+  beforeData?: Record<string, unknown> | null;
+  afterData?: Record<string, unknown> | null;
+  auditText?: string;
   userId: string;
   userEmail: string;
   userName?: string;
@@ -24,6 +26,129 @@ interface Submission {
   status: SubmissionStatus;
   createdAt: string;
   adminNote?: string;
+}
+
+function getSubmissionSummary(submission: Submission): string {
+  const collection = submission.collection;
+  const action = submission.action;
+  const data = submission.data || {};
+
+  const word = (data.ilokanoWord as string) || (data.english as string) || (data.ilokano as string) || null;
+
+  const collectionLabel = collection.charAt(0).toUpperCase() + collection.slice(1);
+
+  if (action === "delete") {
+    return word
+      ? `Delete "${word}" from ${collectionLabel}`
+      : `Delete item from ${collectionLabel}`;
+  }
+
+  if (action === "create") {
+    if (collection === "dictionary" || collection === "phrasebook") {
+      const pos = data.partOfSpeech ? ` (${data.partOfSpeech})` : "";
+      return word
+        ? `Add "${word}"${pos} to ${collectionLabel}`
+        : `Add new item to ${collectionLabel}`;
+    }
+    if (collection === "translations") {
+      const ilokano = data.ilokano as string;
+      const english = data.english as string;
+      return ilokano && english
+        ? `Add "${ilokano}" → "${english}" to ${collectionLabel}`
+        : `Add new translation to ${collectionLabel}`;
+    }
+    return `Add new item to ${collectionLabel}`;
+  }
+
+  if (action === "update") {
+    const fields = Object.keys(data).filter((k) => !k.startsWith("_"));
+    const fieldList = fields.length > 0 ? fields.join(", ") : "content";
+    return word
+      ? `Update "${word}" (${fieldList}) in ${collectionLabel}`
+      : `Update item (${fieldList}) in ${collectionLabel}`;
+  }
+
+  return `${action.charAt(0).toUpperCase() + action.slice(1)} on ${collectionLabel}`;
+}
+
+const fieldLabels: Record<string, string> = {
+  ilokanoWord: "Ilokano word",
+  englishTranslation: "English translation",
+  tagalogTranslation: "Tagalog translation",
+  partOfSpeech: "Part of speech",
+  category: "Category",
+  tts_url: "TTS audio URL",
+  english: "English",
+  ilokano: "Ilokano",
+  tagalog: "Tagalog",
+  role: "Role",
+};
+
+function cleanDisplayData(data?: Record<string, unknown> | null): Record<string, unknown> {
+  if (!data) return {};
+  return Object.fromEntries(
+    Object.entries(data).filter(([key, value]) => !key.startsWith("_") && value !== undefined)
+  );
+}
+
+function formatDisplayValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "(empty)";
+  if (Array.isArray(value)) return value.map(formatDisplayValue).join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function quoteDisplayValue(value: unknown): string {
+  const formatted = formatDisplayValue(value);
+  return formatted === "(empty)" ? formatted : `"${formatted}"`;
+}
+
+function formatDisplayFields(data?: Record<string, unknown> | null): string[] {
+  return Object.entries(cleanDisplayData(data)).map(([key, value]) => {
+    return `- ${fieldLabels[key] || key}: ${formatDisplayValue(value)}`;
+  });
+}
+
+function getSubmissionAuditDetails(submission: Submission): string {
+  if (submission.auditText) return submission.auditText;
+
+  const collectionLabel = submission.collection.charAt(0).toUpperCase() + submission.collection.slice(1);
+  const beforeData = cleanDisplayData(submission.beforeData);
+  const afterData = cleanDisplayData(submission.afterData || submission.data);
+
+  if (submission.action === "delete") {
+    return [
+      getSubmissionSummary(submission),
+      "Deleted item details:",
+      ...formatDisplayFields(Object.keys(beforeData).length ? beforeData : afterData),
+    ].join("\n");
+  }
+
+  if (submission.action === "create") {
+    return [
+      getSubmissionSummary(submission),
+      "Created data:",
+      ...formatDisplayFields(afterData),
+    ].join("\n");
+  }
+
+  if (submission.action === "update") {
+    const changedLines = Object.keys({ ...beforeData, ...afterData })
+      .filter((key) => !key.startsWith("_"))
+      .filter((key) => formatDisplayValue(beforeData[key]) !== formatDisplayValue(afterData[key]))
+      .map((key) => {
+        const label = fieldLabels[key] || key;
+        return `- ${label} changed from ${quoteDisplayValue(beforeData[key])} to ${quoteDisplayValue(afterData[key])}`;
+      });
+
+    return [
+      getSubmissionSummary(submission),
+      changedLines.length > 0 ? "Changed fields:" : `No changed fields recorded for this ${collectionLabel} item.`,
+      ...changedLines,
+    ].join("\n");
+  }
+
+  return getSubmissionSummary(submission);
 }
 
 export default function AdminDashboard() {
@@ -128,7 +253,7 @@ export default function AdminDashboard() {
         </Box>
 
         {/* Top-level navigation tabs */}
-        <Tabs.Root value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
+        <Tabs.Root value={activeTab} onValueChange={(value) => setActiveTab(value as "submissions" | "users" | "role-requests" | "permissions")}>
           <Tabs.List size="2" mb="5">
             {hasPermission("submissions:review") && (
               <Tabs.Trigger value="submissions">
@@ -168,7 +293,7 @@ export default function AdminDashboard() {
           <Tabs.Content value="submissions">
             {/* Filter controls for submissions */}
             <Flex gap="2" mb="4">
-              <Tabs.Root value={filterStatus} onValueChange={(value) => setFilterStatus(value as any)}>
+              <Tabs.Root value={filterStatus} onValueChange={(value) => setFilterStatus(value as SubmissionStatus | "all")}>
                 <Tabs.List size="2">
                   {["all", "pending", "approved", "rejected"].map((status) => (
                     <Tabs.Trigger key={status} value={status} style={{ textTransform: "capitalize" }}>
@@ -231,9 +356,12 @@ export default function AdminDashboard() {
 
                     {submission.data && (
                       <Box mt="3" p="3" style={{ background: "var(--gray-a2)", borderRadius: "var(--radius-2)" }}>
-                        <pre style={{ fontSize: "var(--font-size-2)", color: "var(--gray-11)", overflow: "auto", margin: 0 }}>
-                          {JSON.stringify(submission.data, null, 2)}
-                        </pre>
+                        <Text size="2" weight="medium" color="gray" mb="2" as="p">
+                          Action details:
+                        </Text>
+                        <Text size="2" color="gray" as="p" style={{ whiteSpace: "pre-wrap" }}>
+                          {getSubmissionAuditDetails(submission)}
+                        </Text>
                       </Box>
                     )}
 
@@ -314,10 +442,15 @@ export default function AdminDashboard() {
               )}
 
               <Box p="3" style={{ background: "var(--gray-a2)", borderRadius: "var(--radius-2)" }}>
-                <Text size="2" weight="medium" color="gray" mb="2" as="p">Data:</Text>
-                <pre style={{ fontSize: "var(--font-size-2)", color: "var(--gray-11)", overflow: "auto", margin: 0 }}>
-                  {JSON.stringify(selectedSubmission.data, null, 2)}
-                </pre>
+                <Text size="2" weight="medium" color="gray" mb="2" as="p">Action details:</Text>
+                <Text size="2" as="p" style={{ whiteSpace: "pre-wrap" }}>
+                  {getSubmissionAuditDetails(selectedSubmission)}
+                </Text>
+                {selectedSubmission.reason && (
+                  <Text size="2" color="gray" mt="2" as="p">
+                    Reason: {selectedSubmission.reason}
+                  </Text>
+                )}
               </Box>
 
               <Box>

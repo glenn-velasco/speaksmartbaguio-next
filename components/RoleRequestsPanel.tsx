@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getRoleRequests, reviewSubmission } from "@/lib/actions";
+import { getRoleRequests, reviewSubmission, SubmissionStatus } from "@/lib/actions";
 import { Card, Button, Flex, Box, Text, Heading, Badge, Dialog, TextArea, Spinner } from "@radix-ui/themes";
 import { UserCheck, Check, X } from "lucide-react";
 
@@ -11,7 +11,7 @@ interface RoleRequest {
   collection: string;
   action: string;
   targetId?: string;
-  data: any;
+  data: Record<string, unknown>;
   userId: string;
   userEmail: string;
   userName?: string;
@@ -32,7 +32,7 @@ export function RoleRequestsPanel() {
 
   useEffect(() => {
     async function fetchRequests() {
-      const data = await getRoleRequests(filterStatus === "all" ? undefined : filterStatus as any);
+      const data = await getRoleRequests(filterStatus === "all" ? undefined : filterStatus as SubmissionStatus);
       setRequests(data as RoleRequest[]);
       setLoading(false);
     }
@@ -52,7 +52,7 @@ export function RoleRequestsPanel() {
       setSelectedRequest(null);
       setAdminNote("");
       // Refresh the list
-      const data = await getRoleRequests(filterStatus === "all" ? undefined : filterStatus as any);
+      const data = await getRoleRequests(filterStatus === "all" ? undefined : filterStatus as SubmissionStatus);
       setRequests(data as RoleRequest[]);
     }
   }
@@ -145,7 +145,7 @@ export function RoleRequestsPanel() {
 
               <Box mt="3">
                 <Text size="2" color="gray">
-                  Requested role: <Badge color="blue">{request.data?.role || "editor"}</Badge>
+                  Requested role: <Badge color="blue">{String(request.data?.role || "editor")}</Badge>
                 </Text>
               </Box>
 
@@ -195,7 +195,7 @@ export function RoleRequestsPanel() {
 
               <Box>
                 <Text size="2" color="gray">
-                  Requested role: <Badge color="blue">{selectedRequest.data?.role || "editor"}</Badge>
+                  Requested role: <Badge color="blue">{String(selectedRequest.data?.role || "editor")}</Badge>
                 </Text>
               </Box>
 

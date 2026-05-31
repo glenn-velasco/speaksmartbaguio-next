@@ -140,9 +140,9 @@ export function Header() {
                             } else {
                               alert("✗ " + (result.error || "Failed to submit role request"));
                             }
-                          } catch (err: any) {
-                            alert("✗ An error occurred while submitting the request:\n" +
-                              (err?.message || "Unknown error"));
+                          } catch (err: unknown) {
+                            const message = err instanceof Error ? err.message : "Unknown error";
+                            alert("✗ An error occurred while submitting the request:\n" + message);
                           }
                         }}
                       >
