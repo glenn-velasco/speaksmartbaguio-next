@@ -9,6 +9,7 @@ import { Pagination } from "@/components/Pagination";
 import { AudioPlayButton } from "@/components/AudioPlayButton";
 import { Search } from "lucide-react";
 import { usePagination } from "@/hooks/usePagination";
+import { devLog } from "@/lib/dev-log";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -62,9 +63,9 @@ export default function PhrasebookPage() {
         params.set("ilokanoWord", searchVal.replace(/\*/g, "") + "*");
       }
 
-      console.log("Fetching phrasebook with params:", params.toString());
+      devLog("Fetching phrasebook with params:", params.toString());
       const result = await fetchAPI(`/api/v1/phrasebook?${params}`);
-      console.log("Phrasebook result:", result.data?.length, "items, totalCount:", result.totalCount);
+      devLog("Phrasebook result:", result.data?.length, "items, totalCount:", result.totalCount);
       setItems(result.data || []);
       setHasMore(result.hasMore || false);
       setTotalCount(result.totalCount || 0);
@@ -76,7 +77,7 @@ export default function PhrasebookPage() {
   }, []);
 
   useEffect(() => {
-    console.log("Phrasebook useEffect triggered - filter:", filter, "page:", currentPage, "search:", searchTerm);
+    devLog("Phrasebook useEffect triggered - filter:", filter, "page:", currentPage, "search:", searchTerm);
     fetchPage(currentPage, filter, searchTerm);
   }, [currentPage, filter, searchTerm, fetchPage]);
 

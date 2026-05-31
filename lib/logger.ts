@@ -39,8 +39,11 @@ function log(level: LogLevel, message: string, context?: Record<string, unknown>
       case "warn":
         console.warn(output);
         break;
+      case "debug":
+        console.debug(output);
+        break;
       default:
-        console.log(output);
+        console.info(output);
     }
   } else {
     const prefix = `[${entry.timestamp}] ${level.toUpperCase()}`;
@@ -52,8 +55,11 @@ function log(level: LogLevel, message: string, context?: Record<string, unknown>
       case "warn":
         console.warn(`${prefix} ${message}${contextStr}`);
         break;
+      case "debug":
+        console.debug(`${prefix} ${message}${contextStr}`);
+        break;
       default:
-        console.log(`${prefix} ${message}${contextStr}`);
+        console.info(`${prefix} ${message}${contextStr}`);
     }
   }
 }

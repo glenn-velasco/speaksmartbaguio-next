@@ -9,6 +9,7 @@ import { Pagination } from "@/components/Pagination";
 import { AudioPlayButton } from "@/components/AudioPlayButton";
 import { Search } from "lucide-react";
 import { usePagination } from "@/hooks/usePagination";
+import { devLog } from "@/lib/dev-log";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -63,9 +64,9 @@ export default function DictionaryPage() {
         params.set("ilokanoWord", searchVal.replace(/\*/g, "") + "*");
       }
 
-      console.log("Fetching dictionary with params:", params.toString());
+      devLog("Fetching dictionary with params:", params.toString());
       const result = await fetchAPI(`/api/v1/dictionary?${params}`);
-      console.log("Dictionary result:", result.data?.length, "items, totalCount:", result.totalCount);
+      devLog("Dictionary result:", result.data?.length, "items, totalCount:", result.totalCount);
       setItems(result.data || []);
       setHasMore(result.hasMore || false);
       setTotalCount(result.totalCount || 0);
@@ -77,7 +78,7 @@ export default function DictionaryPage() {
   }, []);
 
   useEffect(() => {
-    console.log("useEffect triggered - filter:", filter, "page:", currentPage, "search:", searchTerm);
+    devLog("useEffect triggered - filter:", filter, "page:", currentPage, "search:", searchTerm);
     fetchPage(currentPage, filter, searchTerm);
   }, [currentPage, filter, searchTerm, fetchPage]);
 

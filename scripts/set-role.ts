@@ -19,6 +19,10 @@
 import { adminAuth } from "@/lib/firebase-admin";
 import { UserRole } from "@/lib/user-roles";
 
+function writeLine(message = "") {
+  process.stdout.write(`${message}\n`);
+}
+
 async function setRole(uid: string, role: UserRole): Promise<void> {
   const validRoles: UserRole[] = ["admin", "editor", "viewer"];
 
@@ -30,16 +34,19 @@ async function setRole(uid: string, role: UserRole): Promise<void> {
 
   try {
     const user = await adminAuth.getUser(uid);
-    console.log(`\nUser found:`);
-    console.log(`   UID: ${user.uid}`);
-    console.log(`   Email: ${user.email || "N/A"}`);
-    console.log(`   Display Name: ${user.displayName || "N/A"}`);
+    writeLine();
+    writeLine("User found:");
+    writeLine(`   UID: ${user.uid}`);
+    writeLine(`   Email: ${user.email || "N/A"}`);
+    writeLine(`   Display Name: ${user.displayName || "N/A"}`);
 
     await adminAuth.setCustomUserClaims(user.uid, { role });
 
-    console.log(`\nRole "${role}" successfully set for user ${user.uid}`);
-    console.log(`\nNote: The user will need to sign out and sign back in for the new role to take effect.`);
-    console.log(`   (Custom claims are embedded in ID tokens, which are refreshed on login)`);
+    writeLine();
+    writeLine(`Role "${role}" successfully set for user ${user.uid}`);
+    writeLine();
+    writeLine("Note: The user will need to sign out and sign back in for the new role to take effect.");
+    writeLine("   (Custom claims are embedded in ID tokens, which are refreshed on login)");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`Error: ${message}`);
@@ -51,10 +58,14 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length !== 2) {
-    console.log("\nUsage:");
-    console.log("   npm run set-role <uid> <role>\n");
-    console.log("   Example: npm run set-role abc123xyz admin\n");
-    console.log("Available roles: admin, editor, viewer\n");
+    writeLine();
+    writeLine("Usage:");
+    writeLine("   npm run set-role <uid> <role>");
+    writeLine();
+    writeLine("   Example: npm run set-role abc123xyz admin");
+    writeLine();
+    writeLine("Available roles: admin, editor, viewer");
+    writeLine();
     process.exit(1);
   }
 
