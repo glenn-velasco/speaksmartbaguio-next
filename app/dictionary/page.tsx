@@ -9,7 +9,7 @@ import { Pagination } from "@/components/Pagination";
 import { AudioPlayButton } from "@/components/AudioPlayButton";
 import { Search } from "lucide-react";
 import { usePagination } from "@/hooks/usePagination";
-import { devLog } from "@/lib/dev-log";
+import { devError, devLog } from "@/lib/dev-log";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -71,7 +71,7 @@ export default function DictionaryPage() {
       setHasMore(result.hasMore || false);
       setTotalCount(result.totalCount || 0);
     } catch (error) {
-      console.error("Failed to fetch dictionary:", error);
+      devError("Failed to fetch dictionary:", error);
     } finally {
       setLoading(false);
     }

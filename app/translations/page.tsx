@@ -8,6 +8,7 @@ import { Flex, Heading, Text, Button, Card, Spinner, Container, Box, TextField, 
 import { Pagination } from "@/components/Pagination";
 import { Search } from "lucide-react";
 import { usePagination } from "@/hooks/usePagination";
+import { devError } from "@/lib/dev-log";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -46,7 +47,7 @@ export default function TranslationsPage() {
       setHasMore(result.hasMore || false);
       setTotalCount(result.totalCount || 0);
     } catch (error) {
-      console.error("Failed to fetch translations:", error);
+      devError("Failed to fetch translations:", error);
     } finally {
       setLoading(false);
     }
