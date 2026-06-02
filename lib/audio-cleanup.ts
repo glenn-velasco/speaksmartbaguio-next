@@ -7,24 +7,27 @@ import { deleteFromStorage } from "@/lib/storage";
 import { adminDb } from "@/lib/firebase-admin";
 
 /**
- * Check if a URL is from our storage (S3 or Firebase)
+ * Check if a URL is from our storage (S3, Dropbox, or Firebase)
  */
 function isOurStorageUrl(url: string): boolean {
   // Check for S3/CDN URLs
   const s3Endpoint = process.env.S3_ENDPOINT;
   const cdnUrl = process.env.S3_CDN_URL;
-  
+
   if (s3Endpoint && url.includes(s3Endpoint)) return true;
   if (cdnUrl && url.includes(cdnUrl)) return true;
-  
+
   // Check for Firebase Storage URLs
   const firebaseBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
   if (firebaseBucket && url.includes(firebaseBucket)) return true;
   if (url.includes("firebasestorage.googleapis.com")) return true;
-  
+
   // Check for firebase:// protocol
   if (url.startsWith("firebase://")) return true;
-  
+
+  // Check for dropbox:// protocol
+  if (url.startsWith("dropbox://")) return true;
+
   return false;
 }
 
@@ -36,6 +39,11 @@ function extractKeyFromUrl(url: string): string | null {
     // Handle firebase:// protocol
     if (url.startsWith("firebase://")) {
       return url.replace("firebase://", "");
+    }
+
+    // Handle dropbox:// protocol
+    if (url.startsWith("dropbox://")) {
+      return url.replace("dropbox://", "");
     }
 
     // Handle regular URLs

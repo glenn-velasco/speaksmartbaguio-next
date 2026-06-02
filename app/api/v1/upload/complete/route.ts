@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
 
     if (backend === "s3") {
       ttsUrlToStore = key;
+    } else if (backend === "dropbox") {
+      ttsUrlToStore = `dropbox://${key}`;
     } else if (backend === "firebase") {
       let finalUrl = accessUrl;
       if (!finalUrl || finalUrl.startsWith("firebase://") || finalUrl.startsWith("/")) {

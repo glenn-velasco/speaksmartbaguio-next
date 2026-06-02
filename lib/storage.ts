@@ -1,6 +1,6 @@
 /**
  * Unified Storage Abstraction Layer
- * Supports both S3 (IDrive E2) and Firebase Storage
+ * Supports S3 (IDrive E2), Dropbox, and Firebase Storage
  * Configurable via STORAGE_BACKEND environment variable
  */
 
@@ -13,13 +13,20 @@ import {
   getS3CDNUrl,
 } from "@/lib/s3-client";
 import {
+  isDropboxConfigured,
+  generateAudioKey as generateDropboxKey,
+  uploadToDropbox,
+  getDropboxTemporaryLink,
+  deleteDropboxFile,
+} from "@/lib/dropbox-client";
+import {
   isFirebaseStorageConfigured,
   generateFirebaseAudioKey,
   uploadToFirebaseStorage,
   deleteFromFirebaseStorage,
 } from "@/lib/firebase-storage";
 
-export type StorageBackend = "s3" | "firebase";
+export type StorageBackend = "s3" | "dropbox" | "firebase";
 
 export interface StorageUploadResult {
   url: string;
@@ -41,7 +48,7 @@ export interface StorageDeleteResult {
 
 /**
  * Determine which storage backend to use
- * Priority: s3 > firebase > error
+ * Priority: s3 > dropbox > firebase > error
  */
 export function getActiveStorageBackend(): StorageBackend {
   const preferred = process.env.STORAGE_BACKEND || "auto";
@@ -53,6 +60,13 @@ export function getActiveStorageBackend(): StorageBackend {
     return "s3";
   }
 
+  if (preferred === "dropbox") {
+    if (!isDropboxConfigured()) {
+      throw new Error("Dropbox storage is preferred but not configured. Please set DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, and DROPBOX_APP_SECRET");
+    }
+    return "dropbox";
+  }
+
   if (preferred === "firebase") {
     if (!isFirebaseStorageConfigured()) {
       throw new Error("Firebase storage is preferred but not configured. Please set NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET");
@@ -60,16 +74,20 @@ export function getActiveStorageBackend(): StorageBackend {
     return "firebase";
   }
 
-  // Auto mode: try S3 first, fallback to Firebase
+  // Auto mode: try S3 first, then Dropbox, then Firebase
   if (isS3Configured()) {
     return "s3";
+  }
+
+  if (isDropboxConfigured()) {
+    return "dropbox";
   }
 
   if (isFirebaseStorageConfigured()) {
     return "firebase";
   }
 
-  throw new Error("No storage backend configured. Please configure either S3 or Firebase Storage");
+  throw new Error("No storage backend configured. Please configure S3, Dropbox, or Firebase Storage");
 }
 
 /**
@@ -127,6 +145,18 @@ export async function generatePresignedUploadUrl(
     };
   }
 
+  // For Dropbox, server-side upload is needed (no presigned URL support)
+  if (backend === "dropbox") {
+    const key = generateDropboxKey(collection, itemId, filename);
+
+    return {
+      uploadUrl: "dropbox://upload",
+      accessUrl: `dropbox://${key}`,
+      key,
+      backend: "dropbox",
+    };
+  }
+
   // For Firebase, we return a special marker URL format
   // The client will need to upload via a different mechanism
   const key = generateFirebaseAudioKey(collection, itemId, filename);
@@ -142,8 +172,8 @@ export async function generatePresignedUploadUrl(
 }
 
 /**
- * Upload a file directly to Firebase Storage (server-side)
- * This is needed because Firebase doesn't support presigned URLs like S3
+ * Upload a file directly to storage (server-side)
+ * Used for Dropbox and Firebase backends
  * 
  * @param file - File buffer
  * @param key - Storage key/path
@@ -155,6 +185,16 @@ export async function uploadToStorage(
   contentType: string
 ): Promise<StorageUploadResult> {
   const backend = getActiveStorageBackend();
+
+  if (backend === "dropbox") {
+    const storageKey = await uploadToDropbox(key, file, contentType);
+    const accessUrl = await getDropboxTemporaryLink(storageKey);
+    return {
+      url: accessUrl,
+      key: storageKey,
+      backend: "dropbox",
+    };
+  }
 
   if (backend === "firebase") {
     const downloadUrl = await uploadToFirebaseStorage(file, key, contentType);
@@ -172,7 +212,7 @@ export async function uploadToStorage(
 
 /**
  * Transform a storage key to a fresh access URL
- * Used for S3 keys that need fresh presigned URLs on each request
+ * Used for S3 and Dropbox keys that need fresh URLs on each request
  * This solves the issue where presigned URLs expire
  * 
  * @param key - Storage key (e.g., "audio/dictionary/123/file.mp3")
@@ -193,12 +233,21 @@ export async function transformStorageKeyToUrl(
     return getFirebaseStorageDownloadUrl(actualKey);
   }
 
-  const cdnUrl = getS3CDNUrl();
-  if (cdnUrl) {
-    return `${cdnUrl}/${key}`;
+  if (key.startsWith("dropbox://")) {
+    const actualKey = key.replace("dropbox://", "");
+    return getDropboxTemporaryLink(actualKey);
   }
 
-  return generateAccessPresignedUrl(key, expiresIn);
+  // S3 key (no protocol prefix)
+  if (isS3Configured()) {
+    const cdnUrl = getS3CDNUrl();
+    if (cdnUrl) {
+      return `${cdnUrl}/${key}`;
+    }
+    return generateAccessPresignedUrl(key, expiresIn);
+  }
+
+  throw new Error(`Cannot transform storage key to URL: no matching backend for key "${key}" and S3 is not configured.`);
 }
 
 /**
@@ -214,6 +263,11 @@ export function needsUrlTransformation(ttsUrl: string | undefined): boolean {
     if (ttsUrl.includes("firebasestorage.googleapis.com") || 
         ttsUrl.includes("firebase.googleapis.com")) {
       return false;
+    }
+
+    // Dropbox temporary links expire, so they need transformation
+    if (ttsUrl.includes("dropbox.com")) {
+      return true;
     }
 
     return true;
@@ -238,6 +292,17 @@ export async function deleteFromStorage(
     if (actualBackend === "s3") {
       await deleteS3File(key);
       return { success: true, backend: "s3" };
+    }
+
+    if (actualBackend === "dropbox") {
+      let storageKey = key;
+      if (key.startsWith("dropbox://")) {
+        storageKey = key.replace("dropbox://", "");
+      } else if (key.startsWith("http")) {
+        throw new Error("Cannot delete Dropbox file from a temporary link URL. Pass the storage key (e.g. \"/audio/...\") or a \"dropbox://\" prefixed value.");
+      }
+      await deleteDropboxFile(storageKey);
+      return { success: true, backend: "dropbox" };
     }
 
     if (actualBackend === "firebase") {
@@ -279,6 +344,10 @@ export function generateAudioKey(
     return generateS3Key(collection, itemId, filename);
   }
 
+  if (backend === "dropbox") {
+    return generateDropboxKey(collection, itemId, filename);
+  }
+
   return generateFirebaseAudioKey(collection, itemId, filename);
 }
 
@@ -286,5 +355,5 @@ export function generateAudioKey(
  * Check if any storage backend is configured
  */
 export function isStorageConfigured(): boolean {
-  return isS3Configured() || isFirebaseStorageConfigured();
+  return isS3Configured() || isDropboxConfigured() || isFirebaseStorageConfigured();
 }
