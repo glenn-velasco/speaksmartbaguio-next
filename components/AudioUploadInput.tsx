@@ -5,6 +5,8 @@ import { Box, Text, Flex, Progress, IconButton, Tooltip } from "@radix-ui/themes
 import { Upload, FileAudio, CheckCircle2, AlertCircle } from "lucide-react";
 import { validateAudioFile, formatFileSize, AudioValidationResult } from "@/lib/audio-validation";
 import { fetchAPI } from "@/lib/fetch-api";
+import { getAuth } from "firebase/auth";
+import { app } from "@/lib/firebase";
 
 interface AudioUploadInputProps {
   collection: string;
@@ -106,13 +108,24 @@ export function AudioUploadInput({
           setUploadState((prev) => ({ ...prev, status: "completing", progress: 95 }));
 
           try {
+            let uploadKey = data.key;
+            let uploadAccessUrl = data.accessUrl;
+
+            if (data.backend === "dropbox") {
+              const response = JSON.parse(xhr.responseText);
+              uploadKey = response.data.key;
+              if (response.data.accessUrl) {
+                uploadAccessUrl = response.data.accessUrl;
+              }
+            }
+
             await fetchAPI("/api/v1/upload/complete", {
               method: "POST",
               body: JSON.stringify({
                 collection,
                 itemId,
-                key: data.key,
-                accessUrl: data.accessUrl,
+                key: uploadKey,
+                accessUrl: uploadAccessUrl,
               }),
             });
 
@@ -123,7 +136,7 @@ export function AudioUploadInput({
               fileSize: file.size,
             });
 
-            onUploadComplete?.(data.accessUrl);
+            onUploadComplete?.(uploadAccessUrl);
           } catch (error) {
             throw new Error(error instanceof Error ? error.message : "Failed to complete upload");
           }
@@ -143,9 +156,30 @@ export function AudioUploadInput({
         onUploadError?.("Network error during upload");
       });
 
-      xhr.open("PUT", data.uploadUrl);
-      xhr.setRequestHeader("Content-Type", file.type);
-      xhr.send(file);
+      // For Dropbox, upload via server endpoint using FormData
+      if (data.backend === "dropbox") {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("collection", collection);
+        formData.append("itemId", itemId);
+        formData.append("filename", file.name);
+
+        xhr.open("POST", "/api/v1/upload/dropbox");
+        const auth = getAuth(app);
+        const user = auth.currentUser;
+        if (user) {
+          const token = await user.getIdToken(true);
+          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        } else if (process.env.NEXT_PUBLIC_API_KEY) {
+          xhr.setRequestHeader("x-api-key", process.env.NEXT_PUBLIC_API_KEY);
+        }
+        xhr.send(formData);
+      } else {
+        // For S3 and other backends, use PUT with presigned URL
+        xhr.open("PUT", data.uploadUrl);
+        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.send(file);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to upload audio";
       setUploadState({
