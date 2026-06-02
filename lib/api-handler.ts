@@ -17,7 +17,7 @@ import { requirePermission } from "@/lib/auth-server";
 import { Permission } from "@/lib/permissions";
 import { cleanupOldAudioFile } from "@/lib/audio-cleanup";
 import { generateSearchFields } from "@/lib/search-utils";
-import { transformStorageKeyToUrl } from "@/lib/storage";
+import { transformDocumentTtsUrl } from "@/lib/storage";
 
 export interface CRUDHandlerOptions<CreateSchema extends z.ZodType, UpdateSchema extends z.ZodType> {
   collection: string;
@@ -47,22 +47,6 @@ function safeParseSchema<T extends z.ZodType>(schema: T, data: unknown): SafePar
   }
 
   return { success: true, data: result.data };
-}
-
-async function transformDocumentTtsUrl(doc: { id: string; [key: string]: unknown }): Promise<{ id: string; [key: string]: unknown }> {
-  const ttsUrl = doc.tts_url;
-  
-  if (ttsUrl && typeof ttsUrl === "string") {
-    try {
-      const transformedUrl = await transformStorageKeyToUrl(ttsUrl);
-      return { ...doc, tts_url: transformedUrl };
-    } catch (error) {
-      logger.warn("Failed to transform tts_url", { id: doc.id, error: (error as Error).message });
-      return doc;
-    }
-  }
-  
-  return doc;
 }
 
 async function transformDocumentsTtsUrl(docs: Array<{ id: string; [key: string]: unknown }>): Promise<Array<{ id: string; [key: string]: unknown }>> {

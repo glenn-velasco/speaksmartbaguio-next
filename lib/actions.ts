@@ -7,6 +7,7 @@ import { setUserRole } from "@/lib/admin-roles";
 import { UserRole } from "@/lib/user-roles";
 import { generateSearchFields } from "./search-utils";
 import { logger } from "@/lib/logger";
+import { transformDocumentTtsUrl } from "@/lib/storage";
 
 export type SubmissionAction = "create" | "update" | "delete";
 export type CollectionType = "dictionary" | "phrasebook" | "translations" | "roles";
@@ -711,7 +712,8 @@ export async function getDocumentById(collection: string, id: string) {
       return null;
     }
 
-    return { id: doc.id, ...doc.data() };
+    const data = { id: doc.id, ...doc.data() };
+    return await transformDocumentTtsUrl(data);
   } catch (error) {
     console.error(`Failed to get ${collection} document:`, error);
     return null;

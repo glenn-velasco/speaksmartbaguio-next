@@ -73,6 +73,26 @@ export function getActiveStorageBackend(): StorageBackend {
 }
 
 /**
+ * Transform a document's tts_url field from a storage key to a playable URL.
+ * Returns the document unchanged if there is no tts_url or transformation fails.
+ */
+export async function transformDocumentTtsUrl<T extends { id: string; [key: string]: unknown }>(doc: T): Promise<T> {
+  const ttsUrl = doc.tts_url;
+
+  if (ttsUrl && typeof ttsUrl === "string") {
+    try {
+      const transformedUrl = await transformStorageKeyToUrl(ttsUrl);
+      return { ...doc, tts_url: transformedUrl };
+    } catch (error) {
+      console.warn(`Failed to transform tts_url for ${doc.id}:`, error instanceof Error ? error.message : error);
+      return doc;
+    }
+  }
+
+  return doc;
+}
+
+/**
  * Generate a presigned upload URL
  * Returns upload URL, access URL, and file key
  * 
