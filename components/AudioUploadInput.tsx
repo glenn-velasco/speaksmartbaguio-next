@@ -108,16 +108,7 @@ export function AudioUploadInput({
           setUploadState((prev) => ({ ...prev, status: "completing", progress: 95 }));
 
           try {
-            let uploadKey = data.key;
-            let uploadAccessUrl = data.accessUrl;
-
-            if (data.backend === "dropbox") {
-              const response = JSON.parse(xhr.responseText);
-              uploadKey = response.data.key;
-              if (response.data.accessUrl) {
-                uploadAccessUrl = response.data.accessUrl;
-              }
-            }
+            const uploadKey = data.key;
 
             await fetchAPI("/api/v1/upload/complete", {
               method: "POST",
@@ -125,7 +116,7 @@ export function AudioUploadInput({
                 collection,
                 itemId,
                 key: uploadKey,
-                accessUrl: uploadAccessUrl,
+                accessUrl: data.accessUrl,
               }),
             });
 
@@ -136,7 +127,7 @@ export function AudioUploadInput({
               fileSize: file.size,
             });
 
-            onUploadComplete?.(uploadAccessUrl);
+            onUploadComplete?.(data.accessUrl);
           } catch (error) {
             throw new Error(error instanceof Error ? error.message : "Failed to complete upload");
           }

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
-import { unstable_cache, revalidateTag } from "next/cache";
+import { revalidateTag } from "next/cache";
 import {
   successResponse,
   notFoundResponse,
@@ -211,16 +211,7 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       const filterParams = Object.fromEntries(searchParams.entries());
       const filterString = JSON.stringify(filterParams);
 
-      const cachedFetch = unstable_cache(
-        fetchCollectionData,
-        [collection, "fetch"],
-        {
-          tags: [collection],
-          revalidate: 60,
-        }
-      );
-
-      const result = await cachedFetch(collection, filterString, limit, offset);
+      const result = await fetchCollectionData(collection, filterString, limit, offset);
 
       return successResponse(result.data, 200, {
         total: result.total,

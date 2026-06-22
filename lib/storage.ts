@@ -224,6 +224,9 @@ export async function transformStorageKeyToUrl(
 ): Promise<string> {
 
   if (key.startsWith("http://") || key.startsWith("https://")) {
+    if (key.includes("dropbox.com") || key.includes("dropboxusercontent.com")) {
+      console.warn(`Stale Dropbox temporary URL detected in DB: ${key.substring(0, 80)}... Run migration to convert to dropbox:// key`);
+    }
     return key;
   }
 
@@ -248,32 +251,6 @@ export async function transformStorageKeyToUrl(
   }
 
   throw new Error(`Cannot transform storage key to URL: no matching backend for key "${key}" and S3 is not configured.`);
-}
-
-/**
- * Check if a tts_url needs transformation to a fresh URL
- * Returns true if it's a storage key (not a full URL)
- * 
- * @param ttsUrl - The tts_url value from database
- */
-export function needsUrlTransformation(ttsUrl: string | undefined): boolean {
-  if (!ttsUrl) return false;
-  
-  if (ttsUrl.startsWith("http://") || ttsUrl.startsWith("https://")) {
-    if (ttsUrl.includes("firebasestorage.googleapis.com") || 
-        ttsUrl.includes("firebase.googleapis.com")) {
-      return false;
-    }
-
-    // Dropbox temporary links expire, so they need transformation
-    if (ttsUrl.includes("dropbox.com")) {
-      return true;
-    }
-
-    return true;
-  }
-
-  return true;
 }
 
 /**
