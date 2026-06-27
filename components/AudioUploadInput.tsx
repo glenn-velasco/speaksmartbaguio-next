@@ -108,7 +108,14 @@ export function AudioUploadInput({
           setUploadState((prev) => ({ ...prev, status: "completing", progress: 95 }));
 
           try {
-            const uploadKey = data.key;
+            let uploadKey = data.key;
+            let previewUrl = data.accessUrl;
+
+            if (data.backend === "dropbox") {
+              const dropboxResult = JSON.parse(xhr.responseText);
+              uploadKey = dropboxResult.data.key;
+              previewUrl = dropboxResult.data.accessUrl;
+            }
 
             await fetchAPI("/api/v1/upload/complete", {
               method: "POST",
@@ -116,7 +123,7 @@ export function AudioUploadInput({
                 collection,
                 itemId,
                 key: uploadKey,
-                accessUrl: data.accessUrl,
+                accessUrl: previewUrl,
               }),
             });
 
@@ -127,7 +134,7 @@ export function AudioUploadInput({
               fileSize: file.size,
             });
 
-            onUploadComplete?.(data.accessUrl);
+            onUploadComplete?.(previewUrl);
           } catch (error) {
             throw new Error(error instanceof Error ? error.message : "Failed to complete upload");
           }
@@ -241,7 +248,7 @@ export function AudioUploadInput({
             )}
           </Box>
           <Tooltip content="Upload another file">
-            <IconButton variant="ghost" size="1" onClick={resetUpload}>
+            <IconButton type="button" variant="ghost" size="1" onClick={resetUpload}>
               <Upload className="w-4 h-4" />
             </IconButton>
           </Tooltip>
@@ -307,7 +314,7 @@ export function AudioUploadInput({
             </Text>
           </Box>
           <Tooltip content="Try again">
-            <IconButton variant="ghost" size="1" onClick={resetUpload}>
+            <IconButton type="button" variant="ghost" size="1" onClick={resetUpload}>
               <Upload className="w-4 h-4" />
             </IconButton>
           </Tooltip>

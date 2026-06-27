@@ -18,7 +18,10 @@ import {
   uploadToDropbox,
   getDropboxTemporaryLink,
   deleteDropboxFile,
+  isStaleDropboxUrl,
+  findDropboxKeyForItem,
 } from "@/lib/dropbox-client";
+import { adminDb } from "@/lib/firebase-admin";
 import {
   isFirebaseStorageConfigured,
   generateFirebaseAudioKey,
@@ -94,11 +97,27 @@ export function getActiveStorageBackend(): StorageBackend {
  * Transform a document's tts_url field from a storage key to a playable URL.
  * Returns the document unchanged if there is no tts_url or transformation fails.
  */
-export async function transformDocumentTtsUrl<T extends { id: string; [key: string]: unknown }>(doc: T): Promise<T> {
+export async function transformDocumentTtsUrl<T extends { id: string; [key: string]: unknown }>(
+  doc: T,
+  collection?: string
+): Promise<T> {
   const ttsUrl = doc.tts_url;
 
   if (ttsUrl && typeof ttsUrl === "string") {
     try {
+      if (collection && isStaleDropboxUrl(ttsUrl)) {
+        const recoveredKey = await findDropboxKeyForItem(collection, doc.id);
+        if (recoveredKey) {
+          await adminDb.collection(collection).doc(doc.id).update({
+            tts_url: `dropbox://${recoveredKey}`,
+          });
+          const freshUrl = await getDropboxTemporaryLink(recoveredKey);
+          return { ...doc, tts_url: freshUrl };
+        }
+        console.warn(`Stale Dropbox URL for ${collection}/${doc.id}: no file found in folder, leaving as-is.`);
+        return doc;
+      }
+
       const transformedUrl = await transformStorageKeyToUrl(ttsUrl);
       return { ...doc, tts_url: transformedUrl };
     } catch (error) {
@@ -224,9 +243,6 @@ export async function transformStorageKeyToUrl(
 ): Promise<string> {
 
   if (key.startsWith("http://") || key.startsWith("https://")) {
-    if (key.includes("dropbox.com") || key.includes("dropboxusercontent.com")) {
-      console.warn(`Stale Dropbox temporary URL detected in DB: ${key.substring(0, 80)}... Run migration to convert to dropbox:// key`);
-    }
     return key;
   }
 

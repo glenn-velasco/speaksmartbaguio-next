@@ -713,7 +713,7 @@ export async function getDocumentById(collection: string, id: string) {
     }
 
     const data = { id: doc.id, ...doc.data() };
-    return await transformDocumentTtsUrl(data);
+    return await transformDocumentTtsUrl(data, collection);
   } catch (error) {
     console.error(`Failed to get ${collection} document:`, error);
     return null;

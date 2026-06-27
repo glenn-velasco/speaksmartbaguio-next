@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     if (oldTtsUrl) {
       
-      const cleanupResult = await cleanupOldAudioFile(collection, itemId, oldTtsUrl);
+      const cleanupResult = await cleanupOldAudioFile(collection, itemId, oldTtsUrl, key);
       if (!cleanupResult.success) {
         console.warn(`Cleanup warning: ${cleanupResult.message}`);
       }

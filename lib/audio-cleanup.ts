@@ -5,6 +5,7 @@
 
 import { deleteFromStorage } from "@/lib/storage";
 import { adminDb } from "@/lib/firebase-admin";
+import { isStaleDropboxUrl, pruneDropboxFolderExcept } from "@/lib/dropbox-client";
 
 /**
  * Check if a URL is from our storage (S3, Dropbox, or Firebase)
@@ -25,8 +26,9 @@ function isOurStorageUrl(url: string): boolean {
   // Check for firebase:// protocol
   if (url.startsWith("firebase://")) return true;
 
-  // Check for dropbox:// protocol
   if (url.startsWith("dropbox://")) return true;
+
+  if (isStaleDropboxUrl(url)) return true;
 
   return false;
 }
@@ -74,7 +76,8 @@ function extractKeyFromUrl(url: string): string | null {
 export async function cleanupOldAudioFile(
   collection: string,
   itemId: string,
-  oldTtsUrl: string
+  oldTtsUrl: string,
+  keepKey?: string
 ): Promise<{ success: boolean; message: string }> {
   try {
 
@@ -85,6 +88,11 @@ export async function cleanupOldAudioFile(
     if (!isOurStorageUrl(oldTtsUrl)) {
 
       return { success: true, message: "External URL, skipping deletion" };
+    }
+
+    if (isStaleDropboxUrl(oldTtsUrl)) {
+      await pruneDropboxFolderExcept(collection, itemId, keepKey ?? null);
+      return { success: true, message: "Pruned old Dropbox audio file(s)" };
     }
 
     const key = extractKeyFromUrl(oldTtsUrl);

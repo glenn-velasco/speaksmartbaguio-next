@@ -49,8 +49,8 @@ function safeParseSchema<T extends z.ZodType>(schema: T, data: unknown): SafePar
   return { success: true, data: result.data };
 }
 
-async function transformDocumentsTtsUrl(docs: Array<{ id: string; [key: string]: unknown }>): Promise<Array<{ id: string; [key: string]: unknown }>> {
-  return Promise.all(docs.map(transformDocumentTtsUrl));
+async function transformDocumentsTtsUrl(docs: Array<{ id: string; [key: string]: unknown }>, collection: string): Promise<Array<{ id: string; [key: string]: unknown }>> {
+  return Promise.all(docs.map((doc) => transformDocumentTtsUrl(doc, collection)));
 }
 
 async function parseRequestBody(request: NextRequest): Promise<unknown> {
@@ -192,7 +192,7 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       ...doc.data(),
     }));
 
-    const transformedData = await transformDocumentsTtsUrl(data);
+    const transformedData = await transformDocumentsTtsUrl(data, collectionName);
 
     return {
       data: transformedData,
@@ -326,7 +326,10 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
           oldUrl: oldTtsUrl,
           newUrl: newTtsUrl,
         });
-        const cleanupResult = await cleanupOldAudioFile(collection, id, oldTtsUrl);
+        const keepKey = typeof newTtsUrl === "string" && newTtsUrl.startsWith("dropbox://")
+          ? newTtsUrl.replace("dropbox://", "")
+          : undefined;
+        const cleanupResult = await cleanupOldAudioFile(collection, id, oldTtsUrl, keepKey);
         if (!cleanupResult.success) {
           logger.warn("Cleanup warning", { collection, id, message: cleanupResult.message });
         }

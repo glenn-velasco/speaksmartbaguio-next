@@ -216,7 +216,7 @@ export function AudioPreview({
           </Flex>
           {onRemove && (
             <Tooltip content="Remove audio">
-              <IconButton variant="ghost" size="1" onClick={onRemove}>
+              <IconButton type="button" variant="ghost" size="1" onClick={onRemove}>
                 <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
                   <path
                     d="M11.7816 4.03156C12.0062 3.81595 12.0062 3.46776 11.7816 3.25215C11.557 3.03654 11.1935 3.03654 10.9689 3.25215L7.50005 6.58034L4.03116 3.25215C3.80655 3.03654 3.44305 3.03654 3.21844 3.25215C2.99383 3.46776 2.99383 3.81595 3.21844 4.03156L6.68733 7.35975L3.21844 10.6879C2.99383 10.9036 2.99383 11.2517 3.21844 11.4674C3.44305 11.683 3.80655 11.683 4.03116 11.4674L7.50005 8.13918L10.9689 11.4674C11.1935 11.683 11.557 11.683 11.7816 11.4674C12.0062 11.2517 12.0062 10.9036 11.7816 10.6879L8.31272 7.35975L11.7816 4.03156Z"
@@ -248,6 +248,7 @@ export function AudioPreview({
         <Flex align="center" gap="2">
           <Tooltip content={playing ? "Pause" : "Play"}>
             <IconButton
+              type="button"
               variant="solid"
               color="indigo"
               size="2"
@@ -284,7 +285,7 @@ export function AudioPreview({
           </Tooltip>
 
           <Tooltip content="Rewind">
-            <IconButton variant="ghost" size="2" onClick={handleRewind}>
+            <IconButton type="button" variant="ghost" size="2" onClick={handleRewind}>
               <RotateCcw className="w-4 h-4" />
             </IconButton>
           </Tooltip>
