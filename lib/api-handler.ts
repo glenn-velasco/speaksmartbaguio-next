@@ -67,66 +67,42 @@ async function parseRequestBody(request: NextRequest): Promise<unknown> {
   }
 }
 
-function buildFilterQuery(
+function buildWildcardQueries(
   collection: string,
   filterableFields: string[],
   searchParams: URLSearchParams,
   searchableFields: string[] = [],
-): { query: FirebaseFirestore.Query; searchField?: string } {
-  let query: FirebaseFirestore.Query = adminDb.collection(collection);
-  let searchField: string | undefined;
+): {
+  wildcardQueries: Array<{ query: FirebaseFirestore.Query; searchField: string }>;
+  exactFilters: Array<{ field: string; value: string }>;
+} {
+  const wildcardQueries: Array<{ query: FirebaseFirestore.Query; searchField: string }> = [];
+  const exactFilters: Array<{ field: string; value: string }> = [];
 
   for (const field of filterableFields) {
     const value = searchParams.get(field);
-    if (value) {
-      if (value.includes("*")) {
-        const prefix = value.replace(/\*/g, "");
-        if (prefix) {
-          if (searchableFields.includes(field)) {
-            const lowerPrefix = prefix.toLowerCase();
-            query = query
-              .where(`_search.${field}`, ">=", lowerPrefix)
-              .where(`_search.${field}`, "<=", lowerPrefix + "\uf8ff");
-            searchField = `_search.${field}`;
-          } else {
-            query = query.where(field, ">=", prefix).where(field, "<=", prefix + "\uf8ff");
-            searchField = field;
-          }
-        }
-      } else {
-        query = query.where(field, "==", value);
+    if (!value) continue;
+
+    if (value.includes("*")) {
+      const prefix = value.replace(/\*/g, "");
+      if (!prefix) continue;
+
+      const lowerPrefix = prefix.toLowerCase();
+      const fieldsToSearch = searchableFields.includes(field) ? searchableFields : [field];
+
+      for (const searchField of fieldsToSearch) {
+        const col = searchableFields.includes(field) ? `_search.${searchField}` : searchField;
+        const q = adminDb.collection(collection)
+          .where(col, ">=", lowerPrefix)
+          .where(col, "<=", lowerPrefix + "\uf8ff");
+        wildcardQueries.push({ query: q, searchField: col });
       }
+    } else {
+      exactFilters.push({ field, value });
     }
   }
 
-  return { query, searchField };
-}
-
-function buildCountQuery(
-  collection: string,
-  filterableFields: string[],
-  searchParams: URLSearchParams,
-  searchField?: string,
-): FirebaseFirestore.Query {
-  let query: FirebaseFirestore.Query = adminDb.collection(collection);
-
-  for (const field of filterableFields) {
-    const value = searchParams.get(field);
-    if (value) {
-      if (value.includes("*")) {
-        const prefix = value.replace(/\*/g, "");
-        if (prefix) {
-          if (searchField) {
-            query = query.where(searchField, ">=", prefix.toLowerCase()).where(searchField, "<=", prefix.toLowerCase() + "\uf8ff");
-          }
-        }
-      } else {
-        query = query.where(field, "==", value);
-      }
-    }
-  }
-
-  return query;
+  return { wildcardQueries, exactFilters };
 }
 
 export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema extends z.ZodType>(
@@ -156,38 +132,56 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
   ) {
     const paramsObj = JSON.parse(filterParams) as Record<string, string>;
     const params = new URLSearchParams(paramsObj);
-    const queryObj = buildFilterQuery(collectionName, filterableFields, params, searchableFields);
-    let query = queryObj.query;
-    const searchField = queryObj.searchField;
+    const { wildcardQueries, exactFilters } = buildWildcardQueries(
+      collectionName, filterableFields, params, searchableFields,
+    );
 
-    if (searchField) {
-      query = query.orderBy(searchField);
+    let allDocs: FirebaseFirestore.QueryDocumentSnapshot[];
+    let totalCount: number;
+
+    if (wildcardQueries.length > 0) {
+      const snapshots = await Promise.all(
+        wildcardQueries.map(({ query }) => query.get()),
+      );
+
+      const seen = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+      for (const snap of snapshots) {
+        for (const doc of snap.docs) {
+          if (!seen.has(doc.id)) {
+            let match = true;
+            for (const { field, value } of exactFilters) {
+              if (doc.get(field) !== value) { match = false; break; }
+            }
+            if (match) seen.set(doc.id, doc);
+          }
+        }
+      }
+
+      allDocs = Array.from(seen.values());
+      allDocs.sort((a, b) => a.id.localeCompare(b.id));
+      totalCount = allDocs.length;
     } else {
+      let query: FirebaseFirestore.Query = adminDb.collection(collectionName);
+      for (const { field, value } of exactFilters) {
+        query = query.where(field, "==", value);
+      }
       query = query.orderBy("__name__");
+      const countSnap = await query.get();
+      totalCount = countSnap.size;
+      query = query.offset(offset).limit(limit + 1);
+      const snap = await query.get();
+      allDocs = snap.docs;
     }
 
-    query = query.offset(offset).limit(limit + 1);
-
-    const snapshot = await query.get();
-
-    const countQuery = buildCountQuery(collectionName, filterableFields, params, searchField);
-    const countSnapshot = await countQuery.get();
-    const totalCount = countSnapshot.size;
-
-    if (snapshot.empty) {
-      return {
-        data: [],
-        total: 0,
-        totalCount,
-        hasMore: false,
-      };
+    if (allDocs.length === 0) {
+      return { data: [], total: 0, totalCount, hasMore: false };
     }
 
-    const docs = snapshot.docs;
-    const hasMore = docs.length > limit;
-    const resultDocs = hasMore ? docs.slice(0, limit) : docs;
+    const hasMore = allDocs.length > offset + limit;
+    const resultDocs = allDocs.slice(offset, offset + limit + 1);
+    const trimmed = resultDocs.length > limit ? resultDocs.slice(0, limit) : resultDocs;
 
-    const data = resultDocs.map((doc) => ({
+    const data = trimmed.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
