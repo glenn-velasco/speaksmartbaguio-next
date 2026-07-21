@@ -136,8 +136,9 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       collectionName, filterableFields, params, searchableFields,
     );
 
-    let allDocs: FirebaseFirestore.QueryDocumentSnapshot[];
+    let pageDocs: FirebaseFirestore.QueryDocumentSnapshot[];
     let totalCount: number;
+    let hasMore: boolean;
 
     if (wildcardQueries.length > 0) {
       const snapshots = await Promise.all(
@@ -157,9 +158,11 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         }
       }
 
-      allDocs = Array.from(seen.values());
+      const allDocs = Array.from(seen.values());
       allDocs.sort((a, b) => a.id.localeCompare(b.id));
       totalCount = allDocs.length;
+      hasMore = totalCount > offset + limit;
+      pageDocs = allDocs.slice(offset, offset + limit);
     } else {
       let query: FirebaseFirestore.Query = adminDb.collection(collectionName);
       for (const { field, value } of exactFilters) {
@@ -168,20 +171,16 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
       query = query.orderBy("__name__");
       const countSnap = await query.get();
       totalCount = countSnap.size;
-      query = query.offset(offset).limit(limit + 1);
-      const snap = await query.get();
-      allDocs = snap.docs;
+      const snap = await query.offset(offset).limit(limit + 1).get();
+      hasMore = snap.docs.length > limit;
+      pageDocs = hasMore ? snap.docs.slice(0, limit) : snap.docs;
     }
 
-    if (allDocs.length === 0) {
+    if (pageDocs.length === 0) {
       return { data: [], total: 0, totalCount, hasMore: false };
     }
 
-    const hasMore = allDocs.length > offset + limit;
-    const resultDocs = allDocs.slice(offset, offset + limit + 1);
-    const trimmed = resultDocs.length > limit ? resultDocs.slice(0, limit) : resultDocs;
-
-    const data = trimmed.map((doc) => ({
+    const data = pageDocs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
@@ -219,7 +218,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     }
   }
 
-  // POST: Create new entry
   async function POST(request: NextRequest) {
     try {
       const authHeader = request.headers.get("authorization");
@@ -251,7 +249,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         }
       }
 
-      // Add search fields
       if (searchableFields.length > 0) {
         validData._search = generateSearchFields(validData, searchableFields);
       }
@@ -329,7 +326,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
         }
       }
 
-      // Update search fields
       if (searchableFields.length > 0) {
         updateData._search = generateSearchFields(updateData, searchableFields);
       }
@@ -358,7 +354,6 @@ export function createCRUDHandler<CreateSchema extends z.ZodType, UpdateSchema e
     }
   }
 
-  // DELETE: Remove entry
   async function DELETE(request: NextRequest) {
     try {
       const authHeader = request.headers.get("authorization");
